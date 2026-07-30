@@ -85,11 +85,11 @@ fn migrate_legacy_boards(target: &Path) -> Result<(), String> {
 
 fn resolve_dir(app: &AppHandle) -> Result<PathBuf, String> {
     let config = read_config(app);
-    match config.boards_dir {
+    let dir = match config.boards_dir {
         Some(dir) => {
             let dir = PathBuf::from(dir);
             fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-            Ok(dir)
+            dir
         }
         None => {
             let dir = default_dir(app);
@@ -98,9 +98,21 @@ fn resolve_dir(app: &AppHandle) -> Result<PathBuf, String> {
             if is_new {
                 migrate_legacy_boards(&dir)?;
             }
-            Ok(dir)
+            dir
         }
-    }
+    };
+    // Ящик существует всегда, а не создаётся первым же запросом: иначе
+    // внешнему инструменту пришлось бы знать, где именно у пользователя доски,
+    // и создавать каталог за приложение.
+    let _ = fs::create_dir_all(inbox_dir(&dir));
+    Ok(dir)
+}
+
+/// Ящик для схем: сюда внешний инструмент кладёт запрос на вставку, отсюда
+/// приложение его забирает. Лежит внутри папки досок, чтобы переезд папки
+/// переносил и его, и чтобы не появлялось второго места «где что-то лежит».
+fn inbox_dir(directory: &Path) -> PathBuf {
+    directory.join("_inbox")
 }
 
 /// `Название.excalidraw`, or `Название (2).excalidraw` when taken.
@@ -180,6 +192,60 @@ fn read_board(path: String) -> Result<String, String> {
     fs::read_to_string(path).map_err(|e| e.to_string())
 }
 
+#[derive(Serialize)]
+struct SchemeRequest {
+    name: String,
+    content: String,
+}
+
+/// Отдаёт самый ранний по имени запрос из ящика, не удаляя его: удаление —
+/// дело `finish_scheme_request`, уже после того как схема легла на холст.
+/// Иначе сбой конвертации терял бы запрос молча.
+#[tauri::command]
+fn take_scheme_request(directory: String) -> Result<Option<SchemeRequest>, String> {
+    let dir = inbox_dir(Path::new(&directory));
+    if !dir.is_dir() {
+        return Ok(None);
+    }
+    let mut requests: Vec<PathBuf> = fs::read_dir(&dir)
+        .map_err(|e| e.to_string())?
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| path.extension().is_some_and(|ext| ext == "json"))
+        .collect();
+    requests.sort();
+
+    let Some(path) = requests.first() else {
+        return Ok(None);
+    };
+    Ok(Some(SchemeRequest {
+        name: path
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string(),
+        content: fs::read_to_string(path).map_err(|e| e.to_string())?,
+    }))
+}
+
+/// Закрывает запрос. Ошибка не теряется в консоли приложения, которую никто не
+/// видит, а ложится рядом файлом — там её и найдёт тот, кто запрос положил.
+#[tauri::command]
+fn finish_scheme_request(
+    directory: String,
+    name: String,
+    error: Option<String>,
+) -> Result<(), String> {
+    let dir = inbox_dir(Path::new(&directory));
+    let safe = Path::new(&name).file_name().ok_or("Некорректное имя")?;
+    let path = dir.join(safe);
+    if let Some(message) = error {
+        let report = path.with_extension("error.txt");
+        fs::write(report, message).map_err(|e| e.to_string())?;
+    }
+    fs::remove_file(&path).map_err(|e| e.to_string())
+}
+
 /// Write-then-rename, so a crash mid-save can never truncate a board.
 #[tauri::command]
 fn save_board(path: String, content: String) -> Result<(), String> {
@@ -219,6 +285,8 @@ fn main() {
             import_board,
             read_board,
             save_board,
+            take_scheme_request,
+            finish_scheme_request,
             write_text,
             write_base64,
             read_base64

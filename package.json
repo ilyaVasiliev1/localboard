@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "board": "node scripts/board.mjs"
   },
   "dependencies": {
     "@excalidraw/common": "file:./upstream-excalidraw/packages/common",
@@ -14,6 +15,7 @@
     "@excalidraw/excalidraw": "file:./upstream-excalidraw/packages/excalidraw",
     "@excalidraw/fractional-indexing": "file:./upstream-excalidraw/packages/fractional-indexing",
     "@excalidraw/math": "file:./upstream-excalidraw/packages/math",
+    "@excalidraw/mermaid-to-excalidraw": "^2.2.2",
     "@tauri-apps/api": "^2.0.0",
     "@tauri-apps/plugin-dialog": "^2.0.0",
     "@tauri-apps/plugin-fs": "^2.0.0",

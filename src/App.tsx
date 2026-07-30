@@ -28,6 +28,7 @@ import {
   pinIcon,
   plusIcon,
 } from "./icons";
+import { applySchemeRequest } from "./scheme-inbox";
 
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 
@@ -365,6 +366,73 @@ export default function App() {
     // Runs once, as soon as the editor API is available.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [api]);
+
+  // Ящик схем: раз в полторы секунды заглянуть, не положил ли внешний
+  // инструмент запрос. Опрос вместо слежения за файловой системой — потому что
+  // цена вопроса здесь одно чтение имён каталога, а watcher принёс бы
+  // зависимость, права и отдельный класс ошибок ради того же результата.
+  useEffect(() => {
+    if (!api || !folder) {
+      return;
+    }
+    let cancelled = false;
+    let busy = false;
+
+    const tick = async () => {
+      if (busy || cancelled) {
+        return;
+      }
+      busy = true;
+      try {
+        const request = await invoke<{ name: string; content: string } | null>(
+          "take_scheme_request",
+          { directory: folder },
+        );
+        if (!request || cancelled) {
+          return;
+        }
+        // Схема живёт в файле доски. Без открытой доски вставка была бы
+        // потеряна ближайшим переключением, поэтому это отказ, а не тихая
+        // вставка «куда-нибудь».
+        if (!currentRef.current) {
+          throw new Error("Не открыта доска — схему некуда сохранять");
+        }
+        try {
+          const { count, title } = await applySchemeRequest(api, request.content);
+          await invoke("finish_scheme_request", {
+            directory: folder,
+            name: request.name,
+          });
+          toast(
+            title
+              ? `Схема «${title}» добавлена: ${count} элементов`
+              : `Схема добавлена: ${count} элементов`,
+          );
+        } catch (error) {
+          // Причина уезжает файлом рядом с запросом: тот, кто его положил,
+          // работает не в этом окне и консоли приложения не видит.
+          await invoke("finish_scheme_request", {
+            directory: folder,
+            name: request.name,
+            error: String(error),
+          });
+          toast(`Схему добавить не удалось: ${error}`);
+        }
+      } catch {
+        // Ящика может не быть, папка могла уехать — это не повод шуметь
+        // тостом каждые полторы секунды.
+      } finally {
+        busy = false;
+      }
+    };
+
+    const timer = window.setInterval(tick, 1500);
+    void tick();
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [api, folder, toast]);
 
   useEffect(() => () => window.clearTimeout(saveTimer.current), []);
 
