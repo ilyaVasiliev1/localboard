@@ -1,0 +1,425 @@
+/*
+ * LocalBoard UI.
+ *
+ * Everything here is built out of Excalidraw's own design tokens (see
+ * `packages/excalidraw/css/theme.scss`) so our panels and buttons follow the
+ * editor's light/dark themes without a parallel palette. Loaded after the
+ * editor's stylesheet, so equal-specificity rules win.
+ */
+
+* {
+  box-sizing: border-box;
+}
+
+/*
+ * Excalidraw ships Assistant as its UI font, but Assistant has no Cyrillic —
+ * so Russian labels silently fell back to the system font while Latin ones
+ * stayed in Assistant, and the two didn't match. One native stack for both.
+ */
+.excalidraw {
+  --ui-font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI",
+    Roboto, Helvetica, Arial, sans-serif;
+}
+
+body {
+  margin: 0;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.shell,
+.excalidraw {
+  height: 100vh;
+}
+
+.editor-error {
+  display: grid;
+  place-items: center;
+  height: 100vh;
+  padding: 30px;
+  color: #b42318;
+  text-align: center;
+}
+
+/* ---------------------------------------------------------------- buttons --
+ * `.dropdown-menu-button` is the editor's hamburger button and `.help-icon`
+ * its footer help button; reusing those classes keeps ours identical.
+ */
+
+.excalidraw .localboard-button {
+  display: grid;
+  place-items: center;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+}
+
+.excalidraw .localboard-button svg {
+  width: var(--lg-icon-size, 1rem);
+  height: var(--lg-icon-size, 1rem);
+}
+
+.excalidraw .localboard-button--active {
+  --background: var(--color-primary-light);
+  background-color: var(--background);
+  color: var(--color-primary-darker);
+}
+
+.excalidraw.theme--dark .localboard-button--active {
+  --background: var(--color-primary-darkest);
+  color: var(--color-icon-white);
+}
+
+/* ---------------------------------------------------------- boards sidebar --
+ * The header sits on the same 1rem inset as the top bar, so the close button
+ * lands exactly where the button that opened the panel was.
+ */
+
+.excalidraw .localboard-sidebar__header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 1rem;
+}
+
+.excalidraw .localboard-sidebar__header::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  width: calc(100% - 2rem);
+  height: 1px;
+  background: var(--sidebar-border-color);
+}
+
+.excalidraw .localboard-sidebar__header-buttons {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-left: auto;
+}
+
+.excalidraw .localboard-sidebar__body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-height: 0;
+  padding: 1rem 0.75rem 0.75rem;
+}
+
+/*
+ * One control size for the whole panel: same height and type as the editor's
+ * own buttons, so nothing in here reads as a different design.
+ */
+.excalidraw .localboard-primary,
+.excalidraw .localboard-secondary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  height: var(--lg-button-size);
+  padding: 0 0.75rem;
+  border: 0;
+  border-radius: var(--border-radius-lg);
+  font-family: var(--ui-font);
+  font-size: 0.875rem;
+  font-weight: 400;
+  cursor: pointer;
+}
+
+.excalidraw .localboard-primary {
+  background-color: var(--color-primary);
+  color: var(--color-icon-white);
+}
+
+.excalidraw .localboard-primary:hover {
+  background-color: var(--color-primary-darker);
+}
+
+.excalidraw .localboard-primary:active {
+  background-color: var(--color-primary-darkest);
+}
+
+.excalidraw .localboard-primary svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.excalidraw .localboard-secondary {
+  background-color: var(--color-surface-mid);
+  color: var(--text-primary-color);
+}
+
+.excalidraw .localboard-secondary:hover {
+  background-color: var(--color-surface-high);
+}
+
+/* new-board form */
+
+.excalidraw .localboard-new {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/*
+ * Text fields are built from the same recipe as the editor's outline buttons
+ * (`outlineButtonStyles`): same height, radius, border and surface.
+ */
+.excalidraw .localboard-input,
+.excalidraw .default-sidebar .ExcTextField__input {
+  height: var(--lg-button-size);
+  padding: 0 0.75rem;
+  border: 1px solid var(--default-border-color);
+  border-radius: var(--border-radius-lg);
+  background-color: var(--color-surface-mid);
+  color: var(--color-on-surface);
+  font-family: var(--ui-font);
+  font-size: 0.875rem;
+  font-weight: 400;
+}
+
+.excalidraw .localboard-input {
+  width: 100%;
+  flex: 0 0 auto;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.excalidraw .localboard-input::placeholder {
+  color: var(--color-on-surface);
+  opacity: 0.45;
+}
+
+.excalidraw .localboard-input:hover,
+.excalidraw .default-sidebar .ExcTextField__input:hover {
+  background-color: var(--color-surface-high);
+}
+
+.excalidraw .localboard-input:focus,
+.excalidraw .default-sidebar .ExcTextField__input:focus-within {
+  outline: none;
+  border-color: var(--color-brand-active);
+}
+
+.excalidraw .localboard-new__error {
+  margin: 0;
+  color: var(--color-danger);
+  font-size: 0.75rem;
+}
+
+.excalidraw .localboard-new__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+/* board list */
+
+.excalidraw .localboard-list {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+  margin: 0 -0.25rem;
+  padding: 0 0.25rem;
+}
+
+.excalidraw .localboard-list__empty {
+  margin: 0.5rem 0.25rem;
+  color: var(--color-gray-50, #adb5bd);
+  font-size: 0.8125rem;
+}
+
+.excalidraw .localboard-list__item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.5rem;
+  border: 0;
+  border-radius: var(--border-radius-lg);
+  background-color: transparent;
+  color: var(--text-primary-color);
+  font-family: var(--ui-font);
+  font-size: 0.875rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.excalidraw .localboard-list__item svg {
+  flex: 0 0 auto;
+  width: 1rem;
+  height: 1rem;
+  opacity: 0.6;
+}
+
+.excalidraw .localboard-list__item:hover {
+  background-color: var(--button-hover-bg);
+}
+
+.excalidraw .localboard-list__item--active,
+.excalidraw .localboard-list__item--active:hover {
+  background-color: var(--color-primary-light);
+  color: var(--color-primary-darker);
+  font-weight: 600;
+}
+
+.excalidraw.theme--dark .localboard-list__item--active,
+.excalidraw.theme--dark .localboard-list__item--active:hover {
+  background-color: var(--color-primary-darkest);
+  color: var(--color-icon-white);
+}
+
+.excalidraw .localboard-list__item--active svg {
+  opacity: 1;
+}
+
+.excalidraw .localboard-list__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* footer: save status + current folder */
+
+.excalidraw .localboard-sidebar__footer {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding-top: 0.625rem;
+  border-top: 1px solid var(--sidebar-border-color);
+  font-size: 0.75rem;
+}
+
+.excalidraw .localboard-sidebar__status {
+  flex: 0 0 auto;
+  color: var(--text-primary-color);
+  opacity: 0.65;
+}
+
+.excalidraw .localboard-sidebar__folder {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-primary);
+  font-family: var(--ui-font);
+  font-size: 0.75rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.excalidraw .localboard-sidebar__folder:hover {
+  text-decoration: underline;
+}
+
+/* ------------------------------------------------- editor's own sidebar --
+ * We keep Excalidraw's sidebar for "find on canvas" (⌘F) but drop the shape
+ * library, and lift the search field onto the close-button row so the panel
+ * is just "search + results".
+ */
+
+/*
+ * Hide the library trigger at the *button* level, not just its inner div:
+ * the wrapping button stays a flex item otherwise, and the top-right bar's
+ * 12px gap then pushes our boards button off the editor's 16px margin.
+ */
+.excalidraw .layer-ui__wrapper__top-right .sidebar-trigger__label-element,
+.excalidraw .default-sidebar .sidebar-triggers {
+  display: none !important;
+}
+
+.excalidraw .default-sidebar [role="tabpanel"][data-testid="library"] {
+  display: none !important;
+}
+
+/*
+ * Put the search field on the same 1rem grid line as the boards panel header
+ * and the top-bar buttons, with the close button sharing the row.
+ */
+.excalidraw .default-sidebar .sidebar__header {
+  position: absolute;
+  top: 1rem;
+  right: 0.75rem;
+  width: auto;
+  padding: 0;
+  z-index: 1;
+}
+
+.excalidraw .default-sidebar .sidebar__header::after {
+  display: none;
+}
+
+.excalidraw .default-sidebar .layer-ui__search {
+  padding-top: 0;
+}
+
+/* leave room for the close button that now shares the row */
+.excalidraw .default-sidebar .layer-ui__search-header {
+  padding-right: calc(0.75rem + var(--lg-button-size) + 0.5rem);
+}
+
+/* --------------------------------------------------------- dialog buttons --
+ * Confirm dialogs auto-focus their action button, so upstream's focus ring
+ * was always painted — a purple hairline on a red fill, which read as a
+ * rendering glitch. Show it only for keyboard focus, and give these buttons
+ * the hover feedback they never had.
+ */
+
+.excalidraw .confirm-dialog-buttons {
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+}
+
+.excalidraw .Dialog__action-button:focus:not(:focus-visible) {
+  box-shadow: none;
+}
+
+/* Ring in the button's own hue, separated by the dialog surface, so the
+   focused action reads as emphasis rather than a stray blue outline. */
+.excalidraw .Dialog__action-button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--island-bg-color),
+    0 0 0 3px var(--default-border-color);
+}
+
+.excalidraw .Dialog__action-button--danger:focus-visible {
+  box-shadow: 0 0 0 2px var(--island-bg-color), 0 0 0 3px var(--color-danger);
+}
+
+.excalidraw .Dialog__action-button--primary:focus-visible {
+  box-shadow: 0 0 0 2px var(--island-bg-color), 0 0 0 3px var(--color-primary);
+}
+
+.excalidraw .Dialog__action-button:hover {
+  background-color: var(--color-surface-mid);
+}
+
+.excalidraw .Dialog__action-button--danger:hover {
+  background-color: var(--color-danger-darker);
+  border-color: var(--color-danger-darker);
+}
+
+.excalidraw .Dialog__action-button--primary:hover {
+  background-color: var(--color-primary-darker);
+  border-color: var(--color-primary-darker);
+}
+
+/* ------------------------------------------------------------ help dialog --
+ * The whole link row goes: these all point at excalidraw.com and there's no
+ * external browser handler wired up, so none of them could ever open.
+ */
+
+.excalidraw .HelpDialog__header {
+  display: none !important;
+}

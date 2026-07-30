@@ -1,0 +1,101 @@
+/**
+ * Icons for LocalBoard's own UI.
+ *
+ * Excalidraw doesn't export its icon set, so we mirror its factory and its
+ * tabler-icons defaults verbatim (see `components/icons.tsx` upstream). That
+ * keeps our buttons visually indistinguishable from the editor's own.
+ */
+import type { ReactNode, SVGProps } from "react";
+
+type Opts = { width?: number; height?: number } & SVGProps<SVGSVGElement>;
+
+const createIcon = (d: ReactNode, opts: Opts = {}) => {
+  const { width = 512, height = width, ...rest } = opts;
+  return (
+    <svg
+      aria-hidden="true"
+      focusable="false"
+      role="img"
+      viewBox={`0 0 ${width} ${height}`}
+      {...rest}
+    >
+      {d}
+    </svg>
+  );
+};
+
+const tablerIconProps: Opts = {
+  width: 24,
+  height: 24,
+  fill: "none",
+  strokeWidth: 2,
+  stroke: "currentColor",
+  strokeLinecap: "round",
+  strokeLinejoin: "round",
+};
+
+// tabler-icons: layout-grid
+export const boardsIcon = createIcon(
+  <g strokeWidth={1.5}>
+    <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+    <path d="M4 4m0 1a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v4a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1z" />
+    <path d="M14 4m0 1a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v4a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1z" />
+    <path d="M4 14m0 1a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v4a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1z" />
+    <path d="M14 14m0 1a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v4a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1z" />
+  </g>,
+  tablerIconProps,
+);
+
+// tabler-icons: plus
+export const plusIcon = createIcon(
+  <g strokeWidth={1.5}>
+    <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+    <line x1="12" y1="5" x2="12" y2="19" />
+    <line x1="5" y1="12" x2="19" y2="12" />
+  </g>,
+  tablerIconProps,
+);
+
+// tabler-icons: file-import
+export const importIcon = createIcon(
+  <g strokeWidth={1.5}>
+    <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+    <path d="M14 3v4a1 1 0 0 0 1 1h4" />
+    <path d="M5 13v-8a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2h-5.5" />
+    <path d="M2 19h7" />
+    <path d="M6 16l3 3l-3 3" />
+  </g>,
+  tablerIconProps,
+);
+
+// tabler-icons: pin (keeps the panel open)
+export const pinIcon = createIcon(
+  <g strokeWidth={1.5}>
+    <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+    <path d="M9 4v6l-2 4v2h10v-2l-2 -4v-6" />
+    <line x1="12" y1="16" x2="12" y2="21" />
+    <line x1="8" y1="4" x2="16" y2="4" />
+  </g>,
+  tablerIconProps,
+);
+
+export const closeIcon = createIcon(
+  <g strokeWidth={1.5}>
+    <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+    <path d="M18 6l-12 12" />
+    <path d="M6 6l12 12" />
+  </g>,
+  tablerIconProps,
+);
+
+// tabler-icons: layout-board (a single board in the list)
+export const boardIcon = createIcon(
+  <g strokeWidth={1.5}>
+    <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+    <path d="M4 4m0 1a1 1 0 0 1 1 -1h14a1 1 0 0 1 1 1v14a1 1 0 0 1 -1 1h-14a1 1 0 0 1 -1 -1z" />
+    <path d="M4 12h8" />
+    <path d="M12 8h8" />
+    <path d="M12 4v16" />
+  </g>,
+  tablerIconProps,
+);

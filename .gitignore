@@ -1,0 +1,24 @@
+# macOS
+.DS_Store
+
+# Зависимости и сборка
+node_modules/
+dist/
+src-tauri/target/
+src-tauri/gen/
+
+# Апстрим Excalidraw — не вендорим: клонируется скриптом на пиннутом коммите
+# (scripts/setup.sh). Иначе репозиторий вырос бы на ~150 МБ чужого кода.
+upstream-excalidraw/
+
+# Локальные доски (пользовательские данные, живут в ~/Documents/LocalBoard)
+boards/
+
+# Сессионные артефакты (канон рабочей зоны)
+.tmp/
+.playwright-mcp/
+
+# Секреты — никогда не коммитить
+*.env
+*.env.local
+.mcp.json
