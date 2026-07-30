@@ -469,11 +469,14 @@ body {
   background-color: var(--color-surface-mid);
 }
 
+/* Подсказка и подтверждение — одна строка на своём месте: если показывать
+   «Скопировано» вместо подсказки только по факту нажатия, строка появляется
+   и исчезает, сдвигая шаги списка. */
 .excalidraw .localboard-agent__hint {
-  display: inline-block;
-  margin-top: 0.375rem;
-  color: var(--color-success-text, var(--color-primary));
-  font-size: 0.75rem;
+  display: block;
+  margin-top: 0.25rem;
+  color: var(--color-gray-60, #6b6b6b);
+  font-size: 0.6875rem;
 }
 
 .excalidraw .localboard-agent__note {

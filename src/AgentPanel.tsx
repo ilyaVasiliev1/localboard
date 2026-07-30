@@ -21,6 +21,41 @@ import { createPortal } from "react-dom";
 
 type AgentSetup = { boardsDir: string; guide: string; cli: string };
 
+/**
+ * Команда и есть кнопка копирования, а подтверждение живёт внутри неё —
+ * иначе состояние приходится держать снаружи на каждую команду отдельно, и
+ * стоит появиться второй, как половина из них молча копирует без отклика.
+ */
+function Command({ children }: { children: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(children);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Буфер может быть недоступен — команду всё равно видно и выделяется.
+    }
+  };
+
+  return (
+    <>
+      <button
+        type="button"
+        className="localboard-agent__command"
+        onClick={copy}
+        title="Нажмите, чтобы скопировать"
+      >
+        {children}
+      </button>
+      <span className="localboard-agent__hint" aria-live="polite">
+        {copied ? "Скопировано" : "Нажмите, чтобы скопировать"}
+      </span>
+    </>
+  );
+}
+
 export default function AgentPanel({
   setup,
   theme,
@@ -30,7 +65,6 @@ export default function AgentPanel({
   theme: string;
   onClose: () => void;
 }) {
-  const [copied, setCopied] = useState(false);
   const command = `cd "${setup.boardsDir}" && claude`;
 
   const container = useMemo(() => {
@@ -56,16 +90,6 @@ export default function AgentPanel({
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [onClose]);
-
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(command);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // Буфер может быть недоступен — команду всё равно видно и выделяется.
-    }
-  };
 
   return createPortal(
     <div
@@ -94,33 +118,12 @@ export default function AgentPanel({
             <ol className="localboard-agent__steps">
               <li>
                 Поставьте Claude Code, если его ещё нет:
-                <button
-                  type="button"
-                  className="localboard-agent__command"
-                  onClick={() =>
-                    void navigator.clipboard.writeText(
-                      "npm install -g @anthropic-ai/claude-code",
-                    )
-                  }
-                  title="Нажмите, чтобы скопировать"
-                >
-                  npm install -g @anthropic-ai/claude-code
-                </button>
+                <Command>npm install -g @anthropic-ai/claude-code</Command>
               </li>
               <li>
                 Запустите его <b>в папке досок</b> — иначе он не увидит
                 инструкцию:
-                <button
-                  type="button"
-                  className="localboard-agent__command"
-                  onClick={copy}
-                  title="Нажмите, чтобы скопировать"
-                >
-                  {command}
-                </button>
-                {copied && (
-                  <span className="localboard-agent__hint">Скопировано</span>
-                )}
+                <Command>{command}</Command>
               </li>
               <li>
                 Скажите словами, что нужно. Схема появится на открытой доске
