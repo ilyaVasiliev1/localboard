@@ -20,7 +20,11 @@ type ShapeStyle = {
 };
 
 export type SchemeStyle = {
-  /** Общее для всех фигур: толщина обводки и степень «нарисованности». */
+  /**
+   * Толщина обводки по шкале редактора: 1 — тонкая, 2 — средняя, 4 — жирная.
+   * Средняя держит схему читаемой и на общем плане доски, где блок величиной
+   * с ноготь, и вблизи, где тонкая линия выглядит недорисованной.
+   */
   strokeWidth: number;
   roughness: number;
   /** Скругление прямоугольников: `round` — мягкие углы, `sharp` — прямые. */
@@ -29,8 +33,12 @@ export type SchemeStyle = {
   arrow: {
     strokeColor: string;
     strokeWidth: number;
-    /** `sharp` — прямые звенья, `round` — сглаженные кривые. */
-    shape: "sharp" | "round";
+    /**
+     * `sharp` — прямая линия от блока к блоку, `elbow` — только прямые углы.
+     * Дугообразных вариантов здесь нет намеренно: на схеме из десятка блоков
+     * кривая читается петлёй, а не связью «отсюда сюда».
+     */
+    shape: "sharp" | "elbow";
   };
   title: { fontSize: number; strokeColor: string };
   /** Необязательно и с оговоркой выше — семейство шрифта подписей. */
@@ -59,7 +67,7 @@ const MONOCHROME: ShapeStyle = {
 };
 
 export const DEFAULT_SCHEME_STYLE: SchemeStyle = {
-  strokeWidth: 1,
+  strokeWidth: 2,
   roughness: 1,
   roundness: "round",
   roles: {
@@ -69,13 +77,10 @@ export const DEFAULT_SCHEME_STYLE: SchemeStyle = {
     accent: { ...MONOCHROME },
     error: { ...MONOCHROME },
   },
-  /*
-   * Стрелки — прямыми звеньями. Excalidraw по умолчанию сглаживает ломаную в
-   * кривую, и на схеме из десятка блоков связи начинают выглядеть петлями:
-   * читается «нарисовано от души», а не «отсюда сюда». Прямые звенья к тому же
-   * честнее показывают, где именно связь поворачивает.
-   */
-  arrow: { strokeColor: "#1e1e1e", strokeWidth: 1, shape: "sharp" },
+  // Тип стрелки — ситуативный: прямая подходит линейному потоку, прямоугольная
+  // (`elbow`) — плотной схеме, где связи идут в обход блоков. Выбирается в
+  // запросе через `style.arrow.shape`.
+  arrow: { strokeColor: "#1e1e1e", strokeWidth: 2, shape: "sharp" },
   title: { fontSize: 28, strokeColor: "#1e1e1e" },
 };
 

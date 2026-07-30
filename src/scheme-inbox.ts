@@ -170,7 +170,11 @@ const styleSkeletons = (
         strokeColor: style.arrow.strokeColor,
         strokeWidth: style.arrow.strokeWidth,
         roughness: style.roughness,
-        roundness: style.arrow.shape === "round" ? { type: 2 } : null,
+        // Оба варианта — без сглаживания; `elbowed` дополнительно заставляет
+        // редактор вести связь только прямыми углами и пересчитывать её при
+        // перетаскивании блоков.
+        roundness: null,
+        elbowed: style.arrow.shape === "elbow",
         ...(style.fontFamily && skeleton.label
           ? { label: { ...skeleton.label, fontFamily: style.fontFamily } }
           : {}),
