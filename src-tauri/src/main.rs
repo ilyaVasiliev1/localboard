@@ -275,6 +275,11 @@ fn set_board_directory(app: AppHandle, directory: String) -> Result<String, Stri
             boards_dir: Some(dir.to_string_lossy().to_string()),
         },
     )?;
+    // Новая папка досок получает ту же оснастку, что и стартовая: ящик и
+    // инструкцию для ассистента. Иначе связка молча переставала работать
+    // ровно в тот момент, когда человек переносит доски в другое место.
+    let _ = fs::create_dir_all(inbox_dir(&dir));
+    write_agent_guide(&app, &dir);
     Ok(dir.to_string_lossy().to_string())
 }
 

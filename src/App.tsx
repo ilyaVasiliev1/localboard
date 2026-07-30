@@ -17,18 +17,17 @@ import {
   serializeAsJSON,
 } from "@excalidraw/excalidraw";
 import { invoke } from "@tauri-apps/api/core";
-import { open } from "@tauri-apps/plugin-dialog";
+import { open, save } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import {
   boardIcon,
   boardsIcon,
   closeIcon,
-  copyIcon,
-  folderIcon,
   importIcon,
   pinIcon,
   plusIcon,
+  saveIcon,
   sparklesIcon,
 } from "./icons";
 import { applySchemeRequest } from "./scheme-inbox";
@@ -116,6 +115,7 @@ export default function App() {
   const [newBoardError, setNewBoardError] = useState("");
   const [filter, setFilter] = useState("");
   const [agentSetup, setAgentSetup] = useState<AgentSetup | null>(null);
+  const [agentTheme, setAgentTheme] = useState("light");
 
   const needle = filter.trim().toLowerCase();
   const visibleBoards = needle
@@ -308,13 +308,47 @@ export default function App() {
 
   const openAgentPanel = useCallback(async () => {
     try {
+      setAgentTheme(api?.getAppState().theme ?? "light");
       setAgentSetup(
         await invoke<AgentSetup>("agent_setup", { directory: folder }),
       );
     } catch (error) {
       toast(`Не удалось открыть панель: ${error}`);
     }
-  }, [folder, toast]);
+  }, [api, folder, toast]);
+
+  /**
+   * «Сохранить как…» ведёт сразу в системное окно сохранения. Штатный пункт
+   * редактора открывает промежуточную панель с выбором способа экспорта, но
+   * половина её вариантов — про облако Excalidraw, которого здесь нет, и
+   * остаётся лишний шаг перед тем же самым диалогом macOS.
+   */
+  const saveCopyAs = useCallback(async () => {
+    if (!api) {
+      return;
+    }
+    const path = await save({
+      defaultPath: `${boardTitle(current) || "Доска"}${EXT}`,
+      filters: [{ name: "Excalidraw", extensions: ["excalidraw"] }],
+    });
+    if (typeof path !== "string") {
+      return;
+    }
+    try {
+      await invoke("write_text", {
+        path,
+        content: serializeAsJSON(
+          api.getSceneElements(),
+          api.getAppState(),
+          api.getFiles(),
+          "local",
+        ),
+      });
+      toast("Копия сохранена");
+    } catch (error) {
+      toast(`Не удалось сохранить: ${error}`);
+    }
+  }, [api, current, toast]);
 
   const chooseFolder = useCallback(async () => {
     const picked = await open({
@@ -511,7 +545,13 @@ export default function App() {
             >
               Работа с Claude…
             </MainMenu.Item>
-            <MainMenu.DefaultItems.Export />
+            <MainMenu.Item
+              icon={saveIcon}
+              onSelect={saveCopyAs}
+              aria-label="Сохранить как"
+            >
+              Сохранить как…
+            </MainMenu.Item>
             <MainMenu.DefaultItems.SaveAsImage />
             <MainMenu.DefaultItems.CommandPalette />
             <MainMenu.DefaultItems.SearchMenu />
@@ -694,7 +734,11 @@ export default function App() {
         </Excalidraw>
       </EditorBoundary>
       {agentSetup && (
-        <AgentPanel setup={agentSetup} onClose={() => setAgentSetup(null)} />
+        <AgentPanel
+          setup={agentSetup}
+          theme={agentTheme}
+          onClose={() => setAgentSetup(null)}
+        />
       )}
     </div>
   );
