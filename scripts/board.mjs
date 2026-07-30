@@ -252,7 +252,9 @@ const sendCommand = async (argv) => {
       mermaid: await readFile(mermaidFile, "utf8"),
       title: flag(argv, "title"),
       anchor: flag(argv, "anchor"),
-      place: flag(argv, "place") ?? "right",
+      // Без явного --place решает приложение: дублировать дефолт здесь значит
+      // однажды разойтись с ним и не понять, почему схема легла не туда.
+      ...(flag(argv, "place") ? { place: flag(argv, "place") } : {}),
       ...(flag(argv, "gap") ? { gap: Number(flag(argv, "gap")) } : {}),
     };
   } else if (argv[0] && !argv[0].startsWith("--")) {

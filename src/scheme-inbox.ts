@@ -153,6 +153,38 @@ const viewportCentre = (api: ExcalidrawImperativeAPI): { x: number; y: number } 
   };
 };
 
+/**
+ * Форма связей по форме схемы.
+ *
+ * Пока поток линейный, прямая линия — самое честное: она показывает «отсюда
+ * сюда» и ничего не добавляет. Как только появляется развилка или слияние,
+ * прямые начинают резать схему наискось и пересекаться между собой; прямые
+ * углы в этом случае раскладываются по сетке и читаются с одного взгляда.
+ */
+const chooseArrowShape = (skeletons: readonly any[]): "sharp" | "elbow" => {
+  const outgoing = new Map<string, number>();
+  const incoming = new Map<string, number>();
+
+  for (const skeleton of skeletons) {
+    if (skeleton.type !== "arrow") {
+      continue;
+    }
+    const from = skeleton.start?.id;
+    const to = skeleton.end?.id;
+    if (from) {
+      outgoing.set(from, (outgoing.get(from) ?? 0) + 1);
+    }
+    if (to) {
+      incoming.set(to, (incoming.get(to) ?? 0) + 1);
+    }
+  }
+
+  const branches =
+    [...outgoing.values()].some((count) => count > 1) ||
+    [...incoming.values()].some((count) => count > 1);
+  return branches ? "elbow" : "sharp";
+};
+
 const styleSkeletons = (
   skeletons: readonly any[],
   style: SchemeStyle,
@@ -273,11 +305,25 @@ export const applySchemeRequest = async (
     throw new Error("Схема пустая: mermaid не дал ни одного элемента");
   }
 
-  skeletons = styleSkeletons(skeletons, style, request.roles);
+  // Форма связей решается после разбора mermaid: до него неизвестно, есть ли
+  // в схеме ветвления.
+  const resolved: SchemeStyle = {
+    ...style,
+    arrow: {
+      ...style.arrow,
+      shape:
+        style.arrow.shape === "auto"
+          ? chooseArrowShape(skeletons)
+          : style.arrow.shape,
+    },
+  };
+  skeletons = styleSkeletons(skeletons, resolved, request.roles);
 
   const existing = api.getSceneElements();
   const gap = request.gap ?? 200;
-  const place = request.place ?? "right";
+  // Колонка сверху вниз: доска с десятком схем так читается как документ, а не
+  // как бесконечная лента, по которой нужно ехать вправо.
+  const place = request.place ?? "below";
 
   const reference =
     (request.anchor ? anchoredBounds(existing, request.anchor) : null) ??
