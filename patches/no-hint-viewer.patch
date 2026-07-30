@@ -1,0 +1,25 @@
+diff --git a/packages/excalidraw/components/Toolbar.tsx b/packages/excalidraw/components/Toolbar.tsx
+index d5d692c..7cedcad 100644
+--- a/packages/excalidraw/components/Toolbar.tsx
++++ b/packages/excalidraw/components/Toolbar.tsx
+@@ -7,7 +7,6 @@ import { useTunnels } from "../context/tunnels";
+ import { t } from "../i18n";
+ 
+ import { useEditorInterface, useStylesPanelMode } from "./App";
+-import { HintViewer } from "./HintViewer";
+ import { Island } from "./Island";
+ import { LockButton } from "./LockButton";
+ import { PenModeButton } from "./PenModeButton";
+@@ -218,12 +217,6 @@ export const Toolbar = ({
+       })}
+       data-viewport-ui="top"
+     >
+-      <HintViewer
+-        appState={appState}
+-        isMobile={editorInterface.formFactor === "phone"}
+-        editorInterface={editorInterface}
+-        app={app}
+-      />
+       {heading}
+       <Stack.Row gap={isCompactStylesPanel ? 0.5 : 1}>
+         {/* in compact UI the pen mode button is rendered as a separate

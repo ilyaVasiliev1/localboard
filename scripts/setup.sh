@@ -28,6 +28,19 @@ if [[ "$CURRENT" != "$UPSTREAM_COMMIT" ]]; then
   git -C "$UPSTREAM_DIR" checkout -q FETCH_HEAD
 fi
 
+# Наши правки редактора. Апстрим клонируется на пиннутом коммите и в репозиторий
+# не попадает, поэтому изменения в нём живут отдельными патчами: так они
+# переживают чистую установку и видны как обычный diff, а не растворяются в
+# полутора сотнях мегабайт чужого кода.
+for patch in "$PROJECT_ROOT"/patches/*.patch; do
+  [[ -e "$patch" ]] || continue
+  if git -C "$UPSTREAM_DIR" apply --reverse --check "$patch" 2>/dev/null; then
+    continue  # уже применён
+  fi
+  print "Применяю ${patch:t}…"
+  git -C "$UPSTREAM_DIR" apply "$patch"
+done
+
 # Пакеты редактора отдают не исходники, а сборку: `exports` каждого из них
 # указывает на `dist/`, которого в репозитории Excalidraw нет — он там в
 # .gitignore. Без этого шага Vite не может разрешить @excalidraw/excalidraw, и

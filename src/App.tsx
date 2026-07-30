@@ -11,6 +11,7 @@ import {
   Excalidraw,
   MainMenu,
   Sidebar,
+  WelcomeScreen,
   getSceneVersion,
   restoreAppState,
   restoreElements,
@@ -530,6 +531,14 @@ export default function App() {
             },
           }}
         >
+          {/* Свой экран приветствия: у штатного, кроме центра, есть три
+              стрелки-подсказки к меню, панели инструментов и справке. Они для
+              того, кто открыл редактор впервые, — здесь доска открывается
+              каждый день. Отдав только центр, мы их не рисуем вовсе. */}
+          <WelcomeScreen>
+            <WelcomeScreen.Center />
+          </WelcomeScreen>
+
           <MainMenu>
             <MainMenu.Item
               icon={importIcon}
