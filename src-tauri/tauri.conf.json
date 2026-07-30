@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "LocalBoard",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "identifier": "com.localboard.local",
   "build": { "beforeDevCommand": "npm run dev", "devUrl": "http://localhost:1420", "beforeBuildCommand": "npm run build", "frontendDist": "../dist" },
   "app": { "windows": [{ "title": "LocalBoard", "width": 1280, "height": 800, "minWidth": 900, "minHeight": 600 }], "security": { "csp": "default-src 'self' data: blob:; connect-src 'none'; img-src 'self' data: blob:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; worker-src 'self' blob:" } },
