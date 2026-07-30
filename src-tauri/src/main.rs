@@ -4,7 +4,11 @@ use std::{
     fs,
     path::{Path, PathBuf},
 };
-use tauri::{AppHandle, Manager};
+use std::sync::Mutex;
+use tauri::{
+    menu::{ContextMenu, MenuBuilder, MenuItemBuilder},
+    AppHandle, Emitter, Manager,
+};
 
 const EXT: &str = "excalidraw";
 const EMPTY_BOARD: &str =
@@ -300,6 +304,40 @@ fn read_board(path: String) -> Result<String, String> {
     fs::read_to_string(path).map_err(|e| e.to_string())
 }
 
+/// Доска, для которой сейчас открыто контекстное меню.
+///
+/// Системное меню отвечает событием с идентификатором пункта и ничего не знает
+/// о том, по какой строке кликнули, — поэтому цель запоминается на время показа.
+#[derive(Default)]
+struct BoardMenuTarget(Mutex<Option<String>>);
+
+/// Показывает НАСТОЯЩЕЕ меню macOS, а не нарисованную панель.
+///
+/// Веб-меню, как бы аккуратно его ни стилизовать, отличается от системного всем
+/// сразу: тенью, скруглением, шрифтом, подсветкой пункта и поведением у краёв
+/// экрана. Здесь меню строит сама система, поэтому оно совпадает с остальными
+/// меню macOS по определению.
+#[tauri::command]
+fn show_board_menu(app: AppHandle, window: tauri::Window, path: String) -> Result<(), String> {
+    *app.state::<BoardMenuTarget>()
+        .0
+        .lock()
+        .map_err(|e| e.to_string())? = Some(path);
+
+    let rename = MenuItemBuilder::with_id("board:rename", "Переименовать")
+        .build(&app)
+        .map_err(|e| e.to_string())?;
+    let delete = MenuItemBuilder::with_id("board:delete", "Удалить доску")
+        .build(&app)
+        .map_err(|e| e.to_string())?;
+    let menu = MenuBuilder::new(&app)
+        .items(&[&rename, &delete])
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    menu.popup(window).map_err(|e| e.to_string())
+}
+
 /// Переименование = переименование файла: имя доски нигде больше не хранится,
 /// поэтому расходиться им не с чем.
 #[tauri::command]
@@ -446,6 +484,26 @@ fn read_base64(path: String) -> Result<String, String> {
 
 fn main() {
     tauri::Builder::default()
+        .manage(BoardMenuTarget::default())
+        .on_menu_event(|app, event| {
+            let action = match event.id().0.as_str() {
+                "board:rename" => "rename",
+                "board:delete" => "delete",
+                _ => return,
+            };
+            let target = app
+                .state::<BoardMenuTarget>()
+                .0
+                .lock()
+                .ok()
+                .and_then(|guard| guard.clone());
+            if let Some(path) = target {
+                let _ = app.emit("board-menu", serde_json::json!({
+                    "action": action,
+                    "path": path,
+                }));
+            }
+        })
         // Регистрируется первым — так требует плагин. Второй запуск (из Dock,
         // из Finder или прямым вызовом бинарника в обход LaunchServices) не
         // создаёт вторую копию, а выводит вперёд уже открытое окно.
@@ -466,6 +524,7 @@ fn main() {
             save_board,
             delete_board,
             rename_board,
+            show_board_menu,
             take_scheme_request,
             finish_scheme_request,
             reveal_path,

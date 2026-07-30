@@ -20,6 +20,7 @@ import {
 import { invoke } from "@tauri-apps/api/core";
 import { ask, open, save } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { listen } from "@tauri-apps/api/event";
 
 import {
   boardIcon,
@@ -32,7 +33,6 @@ import {
 } from "./icons";
 import { applySchemeRequest } from "./scheme-inbox";
 import AgentPanel from "./AgentPanel";
-import EditorPortal from "./EditorPortal";
 
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 
@@ -121,12 +121,6 @@ export default function App() {
   const [renaming, setRenaming] = useState<{
     path: string;
     value: string;
-  } | null>(null);
-  const [boardMenu, setBoardMenu] = useState<{
-    board: Board;
-    x: number;
-    y: number;
-    theme: string;
   } | null>(null);
 
   const needle = filter.trim().toLowerCase();
@@ -379,7 +373,6 @@ export default function App() {
    */
   const deleteBoard = useCallback(
     async (board: Board) => {
-      setBoardMenu(null);
       const confirmed = await ask(
         `Доска «${boardTitle(board)}» переедет в Корзину.`,
         { title: "Удалить доску?", kind: "warning" }
@@ -579,26 +572,30 @@ export default function App() {
     return () => window.removeEventListener("contextmenu", block);
   }, []);
 
-  // Меню доски закрывается от всего, что означает «я передумал».
+  /**
+   * Ответ системного меню. Слушатель пересоздаётся вместе со списком досок:
+   * событие приносит путь, а по нему нужно найти актуальную доску — иначе
+   * обработчик держал бы список, каким тот был при первом запуске.
+   */
   useEffect(() => {
-    if (!boardMenu) {
-      return;
-    }
-    const close = () => setBoardMenu(null);
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        close();
-      }
-    };
-    window.addEventListener("pointerdown", close);
-    window.addEventListener("keydown", onKeyDown);
-    window.addEventListener("wheel", close, { passive: true });
+    const pending = listen<{ action: string; path: string }>(
+      "board-menu",
+      ({ payload }) => {
+        const board = boards.find((item) => item.path === payload.path);
+        if (!board) {
+          return;
+        }
+        if (payload.action === "rename") {
+          setRenaming({ path: board.path, value: boardTitle(board) });
+        } else if (payload.action === "delete") {
+          void deleteBoard(board);
+        }
+      },
+    );
     return () => {
-      window.removeEventListener("pointerdown", close);
-      window.removeEventListener("keydown", onKeyDown);
-      window.removeEventListener("wheel", close);
+      void pending.then((unlisten) => unlisten());
     };
-  }, [boardMenu]);
+  }, [boards, deleteBoard]);
 
   useEffect(() => () => window.clearTimeout(saveTimer.current), []);
 
@@ -856,12 +853,7 @@ export default function App() {
                       title={boardTitle(board)}
                       onContextMenu={(event) => {
                         event.preventDefault();
-                        setBoardMenu({
-                          board,
-                          x: event.clientX,
-                          y: event.clientY,
-                          theme: api?.getAppState().theme ?? "light",
-                        });
+                        void invoke("show_board_menu", { path: board.path });
                       }}
                       onClick={() => {
                         if (!active) {
@@ -896,43 +888,6 @@ export default function App() {
           </Sidebar>
         </Excalidraw>
       </EditorBoundary>
-      {boardMenu && (
-        <EditorPortal theme={boardMenu.theme} className="localboard-portal">
-          <ul
-            className="context-menu localboard-board-menu"
-            style={{ top: boardMenu.y, left: boardMenu.x }}
-            onContextMenu={(event) => event.preventDefault()}
-            // Иначе «клик мимо меню» срабатывает на самом меню и закрывает его
-            // раньше, чем до пункта дойдёт onClick.
-            onPointerDown={(event) => event.stopPropagation()}
-          >
-            <li>
-              <button
-                type="button"
-                className="context-menu-item"
-                onClick={() => {
-                  setRenaming({
-                    path: boardMenu.board.path,
-                    value: boardTitle(boardMenu.board),
-                  });
-                  setBoardMenu(null);
-                }}
-              >
-                <div className="context-menu-item__label">Переименовать</div>
-              </button>
-            </li>
-            <li>
-              <button
-                type="button"
-                className="context-menu-item dangerous"
-                onClick={() => void deleteBoard(boardMenu.board)}
-              >
-                <div className="context-menu-item__label">Удалить доску</div>
-              </button>
-            </li>
-          </ul>
-        </EditorPortal>
-      )}
       {agentSetup && (
         <AgentPanel
           setup={agentSetup}

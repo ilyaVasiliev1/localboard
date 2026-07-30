@@ -9,6 +9,7 @@
     "core:default",
     "dialog:default",
     "core:window:allow-set-title",
-    "dialog:allow-ask"
+    "dialog:allow-ask",
+    "core:event:default"
   ]
 }
