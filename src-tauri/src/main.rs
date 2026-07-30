@@ -248,18 +248,6 @@ fn agent_setup(app: AppHandle, directory: String) -> Result<serde_json::Value, S
     }))
 }
 
-/// `Название.excalidraw`, or `Название (2).excalidraw` when taken.
-fn unique_path(directory: &Path, name: &str) -> PathBuf {
-    let stem = name.trim_end_matches(&format!(".{EXT}")).trim();
-    let mut candidate = directory.join(format!("{stem}.{EXT}"));
-    let mut counter = 2;
-    while candidate.exists() {
-        candidate = directory.join(format!("{stem} ({counter}).{EXT}"));
-        counter += 1;
-    }
-    candidate
-}
-
 #[tauri::command]
 fn get_board_directory(app: AppHandle) -> Result<String, String> {
     Ok(resolve_dir(&app)?.to_string_lossy().to_string())
@@ -307,27 +295,31 @@ fn create_board(directory: String, name: String) -> Result<Board, String> {
     Ok(board(&path))
 }
 
-/// Copies an external `.excalidraw` file into the boards folder, so every board
-/// the app knows about is a file in one place.
-#[tauri::command]
-fn import_board(directory: String, source: String) -> Result<Board, String> {
-    let source = PathBuf::from(source);
-    let raw = fs::read_to_string(&source).map_err(|e| e.to_string())?;
-    serde_json::from_str::<serde_json::Value>(&raw)
-        .map_err(|_| "Файл не похож на доску Excalidraw".to_string())?;
-    let name = source
-        .file_stem()
-        .ok_or("Некорректное имя файла")?
-        .to_string_lossy()
-        .to_string();
-    let path = unique_path(Path::new(&directory), &name);
-    fs::write(&path, raw).map_err(|e| e.to_string())?;
-    Ok(board(&path))
-}
-
 #[tauri::command]
 fn read_board(path: String) -> Result<String, String> {
     fs::read_to_string(path).map_err(|e| e.to_string())
+}
+
+/// Переименование = переименование файла: имя доски нигде больше не хранится,
+/// поэтому расходиться им не с чем.
+#[tauri::command]
+fn rename_board(path: String, name: String) -> Result<Board, String> {
+    let source = PathBuf::from(&path);
+    let directory = source.parent().ok_or("Некорректный путь")?;
+    let safe = Path::new(&name).file_name().ok_or("Некорректное название")?;
+
+    let mut target = directory.join(safe);
+    if target.extension().is_none_or(|ext| ext != EXT) {
+        target.set_extension(EXT);
+    }
+    if target == source {
+        return Ok(board(&source));
+    }
+    if target.exists() {
+        return Err("Доска с таким названием уже существует".into());
+    }
+    fs::rename(&source, &target).map_err(|e| e.to_string())?;
+    Ok(board(&target))
 }
 
 /// Удаление доски — в корзину, а не в небытие.
@@ -470,10 +462,10 @@ fn main() {
             set_board_directory,
             list_boards,
             create_board,
-            import_board,
             read_board,
             save_board,
             delete_board,
+            rename_board,
             take_scheme_request,
             finish_scheme_request,
             reveal_path,

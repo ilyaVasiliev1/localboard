@@ -25,7 +25,6 @@ import {
   boardIcon,
   boardsIcon,
   closeIcon,
-  importIcon,
   pinIcon,
   plusIcon,
   saveIcon,
@@ -119,6 +118,10 @@ export default function App() {
   const [filter, setFilter] = useState("");
   const [agentSetup, setAgentSetup] = useState<AgentSetup | null>(null);
   const [agentTheme, setAgentTheme] = useState("light");
+  const [renaming, setRenaming] = useState<{
+    path: string;
+    value: string;
+  } | null>(null);
   const [boardMenu, setBoardMenu] = useState<{
     board: Board;
     x: number;
@@ -293,28 +296,6 @@ export default function App() {
     }
   }, [folder, listBoards, newBoardName, openBoard]);
 
-  const importBoard = useCallback(async () => {
-    const source = await open({
-      multiple: false,
-      title: "Импортировать доску",
-      filters: [{ name: "Excalidraw", extensions: ["excalidraw", "json"] }],
-    });
-    if (typeof source !== "string") {
-      return;
-    }
-    try {
-      const board = await invoke<Board>("import_board", {
-        directory: folder,
-        source,
-      });
-      await listBoards(folder);
-      await openBoard(board);
-      toast(`Доска «${boardTitle(board)}» добавлена в список`);
-    } catch (error) {
-      toast(`Не удалось импортировать файл: ${error}`);
-    }
-  }, [folder, listBoards, openBoard, toast]);
-
   const openAgentPanel = useCallback(async () => {
     try {
       setAgentTheme(api?.getAppState().theme ?? "light");
@@ -358,6 +339,38 @@ export default function App() {
       toast(`Не удалось сохранить: ${error}`);
     }
   }, [api, current, toast]);
+
+  /**
+   * Переименование. Отложенное сохранение сбрасывается на диск ДО переезда
+   * файла: иначе таймер дописал бы правки по старому пути и вернул доску под
+   * прежним именем — рядом с новой.
+   */
+  const commitRename = useCallback(
+    async (board: Board) => {
+      const name = renaming?.value.trim() ?? "";
+      setRenaming(null);
+      if (!name || name === boardTitle(board)) {
+        return;
+      }
+      try {
+        await flushPendingSave();
+        const renamed = await invoke<Board>("rename_board", {
+          path: board.path,
+          name: withExtension(name),
+        });
+        await listBoards(folder);
+        if (currentRef.current?.path === board.path) {
+          currentRef.current = renamed;
+          setCurrent(renamed);
+          localStorage.setItem(LAST_BOARD_KEY, renamed.path);
+          setWindowTitle(`LocalBoard — ${boardTitle(renamed)}`);
+        }
+      } catch (error) {
+        toast(`Не удалось переименовать: ${error}`);
+      }
+    },
+    [flushPendingSave, folder, listBoards, renaming, toast],
+  );
 
   /**
    * Удаление доски. Файл уезжает в корзину, но перед этим гасится отложенное
@@ -644,13 +657,6 @@ export default function App() {
 
           <MainMenu>
             <MainMenu.Item
-              icon={importIcon}
-              onSelect={importBoard}
-              aria-label="Импортировать доску"
-            >
-              Импортировать доску…
-            </MainMenu.Item>
-            <MainMenu.Item
               icon={sparklesIcon}
               onSelect={openAgentPanel}
               aria-label="Работа с Claude"
@@ -802,6 +808,42 @@ export default function App() {
                 )}
                 {visibleBoards.map((board) => {
                   const active = current?.path === board.path;
+
+                  // Переименование прямо в строке списка, как в Finder: имя
+                  // правится там же, где читается, без отдельного окна.
+                  if (renaming?.path === board.path) {
+                    return (
+                      <form
+                        key={board.path}
+                        className="localboard-rename"
+                        onSubmit={(event) => {
+                          event.preventDefault();
+                          void commitRename(board);
+                        }}
+                      >
+                        <input
+                          autoFocus
+                          className="localboard-input"
+                          aria-label="Название доски"
+                          value={renaming.value}
+                          onChange={(event) =>
+                            setRenaming({
+                              path: board.path,
+                              value: event.target.value,
+                            })
+                          }
+                          onBlur={() => void commitRename(board)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Escape") {
+                              event.stopPropagation();
+                              setRenaming(null);
+                            }
+                          }}
+                        />
+                      </form>
+                    );
+                  }
+
                   return (
                     <button
                       type="button"
@@ -855,7 +897,7 @@ export default function App() {
         </Excalidraw>
       </EditorBoundary>
       {boardMenu && (
-        <EditorPortal theme={boardMenu.theme}>
+        <EditorPortal theme={boardMenu.theme} className="localboard-portal">
           <ul
             className="context-menu localboard-board-menu"
             style={{ top: boardMenu.y, left: boardMenu.x }}
@@ -864,6 +906,21 @@ export default function App() {
             // раньше, чем до пункта дойдёт onClick.
             onPointerDown={(event) => event.stopPropagation()}
           >
+            <li>
+              <button
+                type="button"
+                className="context-menu-item"
+                onClick={() => {
+                  setRenaming({
+                    path: boardMenu.board.path,
+                    value: boardTitle(boardMenu.board),
+                  });
+                  setBoardMenu(null);
+                }}
+              >
+                <div className="context-menu-item__label">Переименовать</div>
+              </button>
+            </li>
             <li>
               <button
                 type="button"

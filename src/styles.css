@@ -492,10 +492,23 @@ body {
  * общие с меню холста. Своё здесь только позиционирование по курсору.
  */
 
+/*
+ * Слой выше боковой панели: у неё `--zIndex-ui-library` (120), и меню с
+ * меньшим значением просто не видно — оно рисуется под панелью, из которой
+ * его и вызвали.
+ */
 .excalidraw .localboard-board-menu {
   position: fixed;
-  z-index: 10;
+  z-index: var(--zIndex-popup, 1001);
   margin: 0;
+}
+
+/*
+ * Контейнер портала — не редактор: высота в 100vh, которую мы задаём самому
+ * редактору, растянула бы пустой div на весь экран следом за окном.
+ */
+.excalidraw.localboard-portal {
+  height: auto;
 }
 
 /*
@@ -517,4 +530,14 @@ body {
 
 .excalidraw .Toast .Toast__progress-bar {
   display: none;
+}
+
+/* Переименование прямо в строке списка: поле занимает то же место, что и
+   строка, чтобы список не дёргался при входе в правку и выходе из неё. */
+.excalidraw .localboard-rename {
+  display: flex;
+}
+
+.excalidraw .localboard-rename .localboard-input {
+  width: 100%;
 }
