@@ -105,6 +105,7 @@ fn resolve_dir(app: &AppHandle) -> Result<PathBuf, String> {
     // внешнему инструменту пришлось бы знать, где именно у пользователя доски,
     // и создавать каталог за приложение.
     let _ = fs::create_dir_all(inbox_dir(&dir));
+    write_agent_guide(app, &dir);
     Ok(dir)
 }
 
@@ -113,6 +114,138 @@ fn resolve_dir(app: &AppHandle) -> Result<PathBuf, String> {
 /// переносил и его, и чтобы не появлялось второго места «где что-то лежит».
 fn inbox_dir(directory: &Path) -> PathBuf {
     directory.join("_inbox")
+}
+
+/// Версия протокола в инструкции. Растёт, когда меняется формат запроса —
+/// по ней файл переписывается у тех, кто обновил приложение.
+const AGENT_PROTOCOL_VERSION: u32 = 1;
+
+fn board_cli_path(app: &AppHandle) -> String {
+    app.path()
+        .resolve("board.mjs", tauri::path::BaseDirectory::Resource)
+        .map(|path| path.to_string_lossy().to_string())
+        // В дев-режиме ресурса рядом нет — тогда путь из репозитория.
+        .unwrap_or_else(|_| "scripts/board.mjs".to_string())
+}
+
+/// Кладёт в папку досок инструкцию для ИИ-ассистента.
+///
+/// Смысл файла — в его местоположении. Агент, которого открыли в этой папке,
+/// читает лежащий рядом `CLAUDE.md` первым делом, и этого достаточно, чтобы он
+/// понял протокол: ни настроек, ни объяснений от человека не требуется.
+/// Поэтому инструкция живёт с досками, а не в репозитории приложения.
+fn write_agent_guide(app: &AppHandle, directory: &Path) {
+    let guide = directory.join("CLAUDE.md");
+    let marker = format!("<!-- localboard-protocol: {AGENT_PROTOCOL_VERSION} -->");
+
+    // Переписываем только свою же устаревшую версию: если человек правил файл
+    // под себя, затирать его правки приложение не вправе.
+    if let Ok(existing) = fs::read_to_string(&guide) {
+        let is_ours = existing.contains("localboard-protocol");
+        let is_current = existing.starts_with(&marker);
+        if is_current || !is_ours {
+            return;
+        }
+    }
+
+    let cli = board_cli_path(app);
+    let contents = format!(
+        r#"{marker}
+# Доски LocalBoard — инструкция для ИИ-ассистента
+
+В этой папке лежат доски приложения **LocalBoard** (macOS): каждая доска — файл
+`*.excalidraw`, обычный JSON формата Excalidraw. Ты можешь читать эти доски и
+класть на них схемы. Ниже — весь протокол.
+
+## Прочитать доску
+
+```bash
+node "{cli}" list                 # какие доски есть и сколько в них элементов
+node "{cli}" read "<имя доски>"   # пересказ: схемы, узлы, связи, координаты
+```
+
+Читай именно через `read`, а не открывай `.excalidraw` целиком: в сыром JSON
+девять десятых объёма — служебные поля, и по нему не видно, что схема говорит.
+
+## Нарисовать схему на открытой доске
+
+Схему кладёт само приложение — ты только оставляешь ему запрос:
+
+```bash
+node "{cli}" send запрос.json
+```
+
+Файл запроса:
+
+```json
+{{
+  "title": "Пайплайн диктовки",
+  "mermaid": "flowchart TD\n  a([Старт]) --> b[Шаг]\n  b --> c{{Развилка?}}",
+  "place": "right",
+  "anchor": "Готовность",
+  "gap": 200,
+  "roles": {{ "Старт": "terminal", "Отказ": "error" }}
+}}
+```
+
+- `mermaid` — описание схемы. Раскладку считает mermaid, поэтому координаты
+  задавать не нужно. Поддержан flowchart и остальные типы диаграмм mermaid.
+- `place` — `"right"` (по умолчанию), `"below"` или `{{"x": 0, "y": 0}}`.
+- `anchor` — текст узла существующей схемы: «положи рядом вот с этой».
+  Без него схема встаёт правее всего, что уже нарисовано.
+- `roles` — переназначение роли узла по его тексту: `step`, `decision`,
+  `terminal`, `accent`, `error`. По умолчанию роль выводится из формы.
+
+## Правила
+
+1. **Приложение должно быть запущено, и доска открыта.** Иначе запрос будет
+   отклонён: рядом с ним появится файл `.error.txt` с причиной — прочитай его,
+   если схема не появилась.
+2. **Схемы приходят чёрно-белыми, и это намеренно.** Цвет на доске означает
+   смысл, и расставляет его владелец доски. Не добавляй цвета и заливки, пока
+   тебя об этом не попросили прямо.
+3. **Не редактируй `.excalidraw` руками.** Стрелки держатся привязками к
+   фигурам; правка JSON снаружи их рвёт, и схема разваливается при первом же
+   перетаскивании блока. Всё, что нужно, делается через `send`.
+4. Файлы в `_inbox` приложение забирает само в течение полутора секунд и
+   удаляет. Ничего дополнительно чистить не нужно.
+
+## Что удобно поручать
+
+- «Прочитай доску N и скажи, что в схеме не покрыто» — `read` даёт узлы и
+  связи, по ним видно недостающие ветки и тупики.
+- «Нарисуй схему такого-то куска кода правее схемы X» — `send` с `anchor`.
+- «Разбери, что тут вообще нарисовано» — `list`, затем `read`.
+"#
+    );
+
+    let _ = fs::write(&guide, contents);
+    let _ = fs::write(
+        directory.join("AGENTS.md"),
+        "Инструкция для ИИ-ассистента по работе с этими досками — в `CLAUDE.md` рядом.\n",
+    );
+}
+
+/// Показать путь в Finder — из окна «Работа с Claude», чтобы человеку не
+/// приходилось искать папку досок руками.
+#[tauri::command]
+fn reveal_path(path: String) -> Result<(), String> {
+    std::process::Command::new("open")
+        .arg(&path)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
+/// Путь к инструкции и к CLI — окно онбординга показывает их как есть,
+/// чтобы команду можно было скопировать, а не переписывать с картинки.
+#[tauri::command]
+fn agent_setup(app: AppHandle, directory: String) -> Result<serde_json::Value, String> {
+    Ok(serde_json::json!({
+        "boardsDir": directory,
+        "guide": Path::new(&directory).join("CLAUDE.md").to_string_lossy(),
+        "cli": board_cli_path(&app),
+    }))
 }
 
 /// `Название.excalidraw`, or `Название (2).excalidraw` when taken.
@@ -276,6 +409,16 @@ fn read_base64(path: String) -> Result<String, String> {
 
 fn main() {
     tauri::Builder::default()
+        // Регистрируется первым — так требует плагин. Второй запуск (из Dock,
+        // из Finder или прямым вызовом бинарника в обход LaunchServices) не
+        // создаёт вторую копию, а выводит вперёд уже открытое окно.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.unminimize();
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             get_board_directory,
@@ -287,6 +430,8 @@ fn main() {
             save_board,
             take_scheme_request,
             finish_scheme_request,
+            reveal_path,
+            agent_setup,
             write_text,
             write_base64,
             read_base64

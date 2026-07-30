@@ -33,47 +33,38 @@ export type SchemeStyle = {
 };
 
 /**
- * Палитра приглушённая: на общей доске рядом окажется десяток схем, и если
- * каждая кричит цветом, вместе они не читаются. Роль отличается заливкой,
- * а не обводкой — обводка у всех одна, поэтому схема выглядит как один объект.
+ * Схемы приходят чёрно-белыми — сознательно.
+ *
+ * Цвет на доске означает смысл, и назначает этот смысл человек, который с
+ * доской работает: что здесь главное, что под вопросом, что уже сделано.
+ * Схема, пришедшая уже раскрашенной, занимает этот канал первой и навязывает
+ * чужую расстановку акцентов, которую потом приходится стирать. Пустая заливка
+ * оставляет решение за владельцем доски и красится в два клика.
+ *
+ * Роли при этом остаются: они по-прежнему различают форму и обводку и держат
+ * место для цвета. Захочется вернуть палитру — достаточно проставить
+ * `backgroundColor` нужным ролям, остальной конвейер уже готов.
  */
+const MONOCHROME: ShapeStyle = {
+  strokeColor: "#1e1e1e",
+  // `transparent`, а не белый: белая заливка перекрывает сетку холста и всё,
+  // что человек нарисовал под схемой.
+  backgroundColor: "transparent",
+  fillStyle: "solid",
+};
+
 export const DEFAULT_SCHEME_STYLE: SchemeStyle = {
   strokeWidth: 1,
   roughness: 1,
   roundness: "round",
   roles: {
-    // Обычный шаг — самый частый блок, поэтому самый тихий.
-    step: {
-      strokeColor: "#1e1e1e",
-      backgroundColor: "#f1f0ff",
-      fillStyle: "solid",
-    },
-    // Развилка: янтарный говорит «здесь ветвление» до чтения подписи.
-    decision: {
-      strokeColor: "#1e1e1e",
-      backgroundColor: "#fff3bf",
-      fillStyle: "solid",
-    },
-    // Начало и конец — зелёный, границы схемы видно с любого зума.
-    terminal: {
-      strokeColor: "#1e1e1e",
-      backgroundColor: "#d3f9d8",
-      fillStyle: "solid",
-    },
-    // Смысловой акцент: то, на что нужно смотреть в первую очередь.
-    accent: {
-      strokeColor: "#5b4ddd",
-      backgroundColor: "#dbd8ff",
-      fillStyle: "solid",
-    },
-    // Отказ, ошибка, тупиковая ветка.
-    error: {
-      strokeColor: "#1e1e1e",
-      backgroundColor: "#ffe3e3",
-      fillStyle: "solid",
-    },
+    step: { ...MONOCHROME },
+    decision: { ...MONOCHROME },
+    terminal: { ...MONOCHROME },
+    accent: { ...MONOCHROME },
+    error: { ...MONOCHROME },
   },
-  arrow: { strokeColor: "#4a4a4a", strokeWidth: 1 },
+  arrow: { strokeColor: "#1e1e1e", strokeWidth: 1 },
   title: { fontSize: 28, strokeColor: "#1e1e1e" },
 };
 

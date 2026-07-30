@@ -24,16 +24,21 @@ import {
   boardIcon,
   boardsIcon,
   closeIcon,
+  copyIcon,
+  folderIcon,
   importIcon,
   pinIcon,
   plusIcon,
+  sparklesIcon,
 } from "./icons";
 import { applySchemeRequest } from "./scheme-inbox";
+import AgentPanel from "./AgentPanel";
 
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 
 type Board = { name: string; path: string };
 type Scene = { elements: any[]; appState: any; files: any };
+type AgentSetup = { boardsDir: string; guide: string; cli: string };
 
 const EXT = ".excalidraw";
 const BOARDS_SIDEBAR = "boards";
@@ -110,6 +115,7 @@ export default function App() {
   const [newBoardName, setNewBoardName] = useState("Новая доска");
   const [newBoardError, setNewBoardError] = useState("");
   const [filter, setFilter] = useState("");
+  const [agentSetup, setAgentSetup] = useState<AgentSetup | null>(null);
 
   const needle = filter.trim().toLowerCase();
   const visibleBoards = needle
@@ -300,6 +306,16 @@ export default function App() {
     }
   }, [folder, listBoards, openBoard, toast]);
 
+  const openAgentPanel = useCallback(async () => {
+    try {
+      setAgentSetup(
+        await invoke<AgentSetup>("agent_setup", { directory: folder }),
+      );
+    } catch (error) {
+      toast(`Не удалось открыть панель: ${error}`);
+    }
+  }, [folder, toast]);
+
   const chooseFolder = useCallback(async () => {
     const picked = await open({
       directory: true,
@@ -488,6 +504,13 @@ export default function App() {
             >
               Импортировать доску…
             </MainMenu.Item>
+            <MainMenu.Item
+              icon={sparklesIcon}
+              onSelect={openAgentPanel}
+              aria-label="Работа с Claude"
+            >
+              Работа с Claude…
+            </MainMenu.Item>
             <MainMenu.DefaultItems.Export />
             <MainMenu.DefaultItems.SaveAsImage />
             <MainMenu.DefaultItems.CommandPalette />
@@ -670,6 +693,9 @@ export default function App() {
           </Sidebar>
         </Excalidraw>
       </EditorBoundary>
+      {agentSetup && (
+        <AgentPanel setup={agentSetup} onClose={() => setAgentSetup(null)} />
+      )}
     </div>
   );
 }

@@ -23,11 +23,16 @@ fi
 
 # Запущенная копия держит свой бандл; переустановка под ней даёт приложение,
 # которое уже не соответствует ни одной версии на диске.
-if pgrep -x LocalBoard >/dev/null 2>&1; then
+#
+# Регистр имени процесса зависит от способа запуска: LaunchServices показывает
+# `LocalBoard`, прямой вызов бинарника — `localboard`. Проверка с учётом
+# регистра промахивалась мимо половины случаев, старая копия переживала
+# установку, и на машине оказывались две.
+if pgrep -ix localboard >/dev/null 2>&1; then
   print "Закрываю запущенный LocalBoard…"
   osascript -e 'tell application "LocalBoard" to quit' >/dev/null 2>&1 || true
   sleep 2
-  pkill -x LocalBoard 2>/dev/null || true
+  pkill -ix localboard 2>/dev/null || true
 fi
 
 # Прежняя установка убирается целиком, а не перезаписывается: ditto поверх
@@ -55,3 +60,8 @@ xattr -dr com.apple.quarantine "$TARGET_APP" 2>/dev/null || true
 
 VERSION=$(defaults read "$TARGET_APP/Contents/Info.plist" CFBundleShortVersionString)
 print "Установлено: $TARGET_APP (версия $VERSION) — единственная копия на машине."
+
+# Запуск только через LaunchServices. Прямой вызов бинарника заводит копию в
+# обход системного реестра приложений — именно так и появляется вторая.
+open -a "$TARGET_APP"
+print "Запущено."
