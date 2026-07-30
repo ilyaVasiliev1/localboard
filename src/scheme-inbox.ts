@@ -170,6 +170,7 @@ const styleSkeletons = (
         strokeColor: style.arrow.strokeColor,
         strokeWidth: style.arrow.strokeWidth,
         roughness: style.roughness,
+        roundness: style.arrow.shape === "round" ? { type: 2 } : null,
         ...(style.fontFamily && skeleton.label
           ? { label: { ...skeleton.label, fontFamily: style.fontFamily } }
           : {}),

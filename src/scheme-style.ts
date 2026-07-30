@@ -26,7 +26,12 @@ export type SchemeStyle = {
   /** Скругление прямоугольников: `round` — мягкие углы, `sharp` — прямые. */
   roundness: "round" | "sharp";
   roles: Record<SchemeRole, ShapeStyle>;
-  arrow: { strokeColor: string; strokeWidth: number };
+  arrow: {
+    strokeColor: string;
+    strokeWidth: number;
+    /** `sharp` — прямые звенья, `round` — сглаженные кривые. */
+    shape: "sharp" | "round";
+  };
   title: { fontSize: number; strokeColor: string };
   /** Необязательно и с оговоркой выше — семейство шрифта подписей. */
   fontFamily?: number;
@@ -64,7 +69,13 @@ export const DEFAULT_SCHEME_STYLE: SchemeStyle = {
     accent: { ...MONOCHROME },
     error: { ...MONOCHROME },
   },
-  arrow: { strokeColor: "#1e1e1e", strokeWidth: 1 },
+  /*
+   * Стрелки — прямыми звеньями. Excalidraw по умолчанию сглаживает ломаную в
+   * кривую, и на схеме из десятка блоков связи начинают выглядеть петлями:
+   * читается «нарисовано от души», а не «отсюда сюда». Прямые звенья к тому же
+   * честнее показывают, где именно связь поворачивает.
+   */
+  arrow: { strokeColor: "#1e1e1e", strokeWidth: 1, shape: "sharp" },
   title: { fontSize: 28, strokeColor: "#1e1e1e" },
 };
 

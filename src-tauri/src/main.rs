@@ -330,6 +330,46 @@ fn read_board(path: String) -> Result<String, String> {
     fs::read_to_string(path).map_err(|e| e.to_string())
 }
 
+/// Удаление доски — в корзину, а не в небытие.
+///
+/// Доска это часы работы, и подтверждение в диалоге защищает только от
+/// случайного клика, но не от передумал-через-минуту. Корзина стоит одного
+/// `rename` и возвращает файл в два клика.
+#[tauri::command]
+fn delete_board(app: AppHandle, path: String) -> Result<(), String> {
+    let source = PathBuf::from(&path);
+    let name = source
+        .file_name()
+        .ok_or("Некорректный путь")?
+        .to_string_lossy()
+        .to_string();
+
+    let trash = app
+        .path()
+        .home_dir()
+        .map_err(|e| e.to_string())?
+        .join(".Trash");
+    if !trash.is_dir() {
+        return fs::remove_file(&source).map_err(|e| e.to_string());
+    }
+
+    let stem = source.file_stem().unwrap_or_default().to_string_lossy();
+    let mut target = trash.join(&name);
+    let mut counter = 2;
+    while target.exists() {
+        target = trash.join(format!("{stem} ({counter}).{EXT}"));
+        counter += 1;
+    }
+
+    // Переименование работает, только пока корзина на том же томе. Доски могут
+    // лежать на внешнем диске — тогда честная копия с последующим удалением.
+    if fs::rename(&source, &target).is_ok() {
+        return Ok(());
+    }
+    fs::copy(&source, &target).map_err(|e| e.to_string())?;
+    fs::remove_file(&source).map_err(|e| e.to_string())
+}
+
 #[derive(Serialize)]
 struct SchemeRequest {
     name: String,
@@ -433,6 +473,7 @@ fn main() {
             import_board,
             read_board,
             save_board,
+            delete_board,
             take_scheme_request,
             finish_scheme_request,
             reveal_path,

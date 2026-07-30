@@ -18,7 +18,7 @@ import {
   serializeAsJSON,
 } from "@excalidraw/excalidraw";
 import { invoke } from "@tauri-apps/api/core";
-import { open, save } from "@tauri-apps/plugin-dialog";
+import { ask, open, save } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import {
@@ -33,6 +33,7 @@ import {
 } from "./icons";
 import { applySchemeRequest } from "./scheme-inbox";
 import AgentPanel from "./AgentPanel";
+import EditorPortal from "./EditorPortal";
 
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 
@@ -51,7 +52,8 @@ const EMPTY_SCENE: Scene = { elements: [], appState: {}, files: {} };
 const boardTitle = (board: Board | null) =>
   board ? board.name.replace(EXT, "") : "";
 
-const folderTitle = (path: string) => path.split("/").filter(Boolean).pop() ?? path;
+const folderTitle = (path: string) =>
+  path.split("/").filter(Boolean).pop() ?? path;
 
 /**
  * Everything we persist about a scene, boiled down to a comparable string —
@@ -117,6 +119,12 @@ export default function App() {
   const [filter, setFilter] = useState("");
   const [agentSetup, setAgentSetup] = useState<AgentSetup | null>(null);
   const [agentTheme, setAgentTheme] = useState("light");
+  const [boardMenu, setBoardMenu] = useState<{
+    board: Board;
+    x: number;
+    y: number;
+    theme: string;
+  } | null>(null);
 
   const needle = filter.trim().toLowerCase();
   const visibleBoards = needle
@@ -133,7 +141,7 @@ export default function App() {
 
   const toast = useCallback(
     (message: string) => api?.setToast({ message, closable: true }),
-    [api],
+    [api]
   );
 
   const listBoards = useCallback(async (directory: string) => {
@@ -150,7 +158,7 @@ export default function App() {
         scene.elements,
         scene.appState,
         scene.files,
-        "local",
+        "local"
       ),
     });
     savedSignatureRef.current = sceneSignature(scene.elements, scene.appState);
@@ -232,7 +240,7 @@ export default function App() {
         }, 0);
       }
     },
-    [api, flushPendingSave, toast],
+    [api, flushPendingSave, toast]
   );
 
   const onChange = useCallback(
@@ -261,7 +269,7 @@ export default function App() {
         }
       }, SAVE_DEBOUNCE_MS);
     },
-    [writeBoard],
+    [writeBoard]
   );
 
   const createBoard = useCallback(async () => {
@@ -311,7 +319,7 @@ export default function App() {
     try {
       setAgentTheme(api?.getAppState().theme ?? "light");
       setAgentSetup(
-        await invoke<AgentSetup>("agent_setup", { directory: folder }),
+        await invoke<AgentSetup>("agent_setup", { directory: folder })
       );
     } catch (error) {
       toast(`Не удалось открыть панель: ${error}`);
@@ -342,7 +350,7 @@ export default function App() {
           api.getSceneElements(),
           api.getAppState(),
           api.getFiles(),
-          "local",
+          "local"
         ),
       });
       toast("Копия сохранена");
@@ -350,6 +358,51 @@ export default function App() {
       toast(`Не удалось сохранить: ${error}`);
     }
   }, [api, current, toast]);
+
+  /**
+   * Удаление доски. Файл уезжает в корзину, но перед этим гасится отложенное
+   * автосохранение: таймер, сработавший после удаления, воссоздал бы файл — и
+   * доска «удалялась» бы через раз, без всякой закономерности на вид.
+   */
+  const deleteBoard = useCallback(
+    async (board: Board) => {
+      setBoardMenu(null);
+      const confirmed = await ask(
+        `Доска «${boardTitle(board)}» переедет в Корзину.`,
+        { title: "Удалить доску?", kind: "warning" }
+      );
+      if (!confirmed) {
+        return;
+      }
+
+      const wasOpen = currentRef.current?.path === board.path;
+      if (wasOpen) {
+        window.clearTimeout(saveTimer.current);
+        saveTimer.current = undefined;
+        currentRef.current = null;
+      }
+
+      try {
+        await invoke("delete_board", { path: board.path });
+        const list = await listBoards(folder);
+        if (wasOpen) {
+          if (list.length > 0) {
+            await openBoard(list[0]);
+          } else {
+            clearCanvas();
+            setCurrent(null);
+            setStatus("Готово");
+            localStorage.removeItem(LAST_BOARD_KEY);
+            setWindowTitle("LocalBoard");
+          }
+        }
+        toast(`Доска «${boardTitle(board)}» в Корзине`);
+      } catch (error) {
+        toast(`Не удалось удалить: ${error}`);
+      }
+    },
+    [clearCanvas, folder, listBoards, openBoard, toast]
+  );
 
   const chooseFolder = useCallback(async () => {
     const picked = await open({
@@ -385,7 +438,15 @@ export default function App() {
     } catch (error) {
       toast(`Не удалось сменить папку: ${error}`);
     }
-  }, [api, clearCanvas, flushPendingSave, folder, listBoards, openBoard, toast]);
+  }, [
+    api,
+    clearCanvas,
+    flushPendingSave,
+    folder,
+    listBoards,
+    openBoard,
+    toast,
+  ]);
 
   // Resolve the boards folder and reopen whatever was open last time.
   useEffect(() => {
@@ -437,7 +498,7 @@ export default function App() {
       try {
         const request = await invoke<{ name: string; content: string } | null>(
           "take_scheme_request",
-          { directory: folder },
+          { directory: folder }
         );
         if (!request || cancelled) {
           return;
@@ -449,7 +510,10 @@ export default function App() {
           throw new Error("Не открыта доска — схему некуда сохранять");
         }
         try {
-          const { count, title } = await applySchemeRequest(api, request.content);
+          const { count, title } = await applySchemeRequest(
+            api,
+            request.content
+          );
           await invoke("finish_scheme_request", {
             directory: folder,
             name: request.name,
@@ -457,7 +521,7 @@ export default function App() {
           toast(
             title
               ? `Схема «${title}» добавлена: ${count} элементов`
-              : `Схема добавлена: ${count} элементов`,
+              : `Схема добавлена: ${count} элементов`
           );
         } catch (error) {
           // Причина уезжает файлом рядом с запросом: тот, кто его положил,
@@ -485,6 +549,44 @@ export default function App() {
     };
   }, [api, folder, toast]);
 
+  /**
+   * Нативное меню WKWebView («Обновить», «Назад») к рисованию отношения не
+   * имеет и появляется поверх наших собственных меню. В полях ввода его
+   * оставляем — там оно даёт копирование и вставку.
+   */
+  useEffect(() => {
+    const block = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("input, textarea, [contenteditable='true']")) {
+        return;
+      }
+      event.preventDefault();
+    };
+    window.addEventListener("contextmenu", block);
+    return () => window.removeEventListener("contextmenu", block);
+  }, []);
+
+  // Меню доски закрывается от всего, что означает «я передумал».
+  useEffect(() => {
+    if (!boardMenu) {
+      return;
+    }
+    const close = () => setBoardMenu(null);
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        close();
+      }
+    };
+    window.addEventListener("pointerdown", close);
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("wheel", close, { passive: true });
+    return () => {
+      window.removeEventListener("pointerdown", close);
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("wheel", close);
+    };
+  }, [boardMenu]);
+
   useEffect(() => () => window.clearTimeout(saveTimer.current), []);
 
   const renderBoardsButton = (appState: { openSidebar?: any }) => {
@@ -495,7 +597,7 @@ export default function App() {
         className={cx(
           "dropdown-menu-button",
           "localboard-button",
-          active && "localboard-button--active",
+          active && "localboard-button--active"
         )}
         title={current ? `Доски — ${boardTitle(current)}` : "Доски"}
         aria-label="Доски"
@@ -531,12 +633,13 @@ export default function App() {
             },
           }}
         >
-          {/* Свой экран приветствия: у штатного, кроме центра, есть три
-              стрелки-подсказки к меню, панели инструментов и справке. Они для
-              того, кто открыл редактор впервые, — здесь доска открывается
-              каждый день. Отдав только центр, мы их не рисуем вовсе. */}
+          {/* Экран приветствия не нужен: новая доска должна открываться
+              чистым холстом. Пустой фрагмент — не то же самое, что отсутствие
+              детей: без детей редактор рисует свой экран по умолчанию, а
+              выключить его через appState нельзя — он сам включает его обратно
+              на каждой пустой доске. */}
           <WelcomeScreen>
-            <WelcomeScreen.Center />
+            <></>
           </WelcomeScreen>
 
           <MainMenu>
@@ -610,7 +713,7 @@ export default function App() {
                   className={cx(
                     "dropdown-menu-button",
                     "localboard-button",
-                    docked && "localboard-button--active",
+                    docked && "localboard-button--active"
                   )}
                   title="Закрепить"
                   aria-label="Закрепить панель"
@@ -705,10 +808,19 @@ export default function App() {
                       key={board.path}
                       className={cx(
                         "localboard-list__item",
-                        active && "localboard-list__item--active",
+                        active && "localboard-list__item--active"
                       )}
                       aria-current={active}
                       title={boardTitle(board)}
+                      onContextMenu={(event) => {
+                        event.preventDefault();
+                        setBoardMenu({
+                          board,
+                          x: event.clientX,
+                          y: event.clientY,
+                          theme: api?.getAppState().theme ?? "light",
+                        });
+                      }}
                       onClick={() => {
                         if (!active) {
                           void openBoard(board);
@@ -742,6 +854,28 @@ export default function App() {
           </Sidebar>
         </Excalidraw>
       </EditorBoundary>
+      {boardMenu && (
+        <EditorPortal theme={boardMenu.theme}>
+          <ul
+            className="context-menu localboard-board-menu"
+            style={{ top: boardMenu.y, left: boardMenu.x }}
+            onContextMenu={(event) => event.preventDefault()}
+            // Иначе «клик мимо меню» срабатывает на самом меню и закрывает его
+            // раньше, чем до пункта дойдёт onClick.
+            onPointerDown={(event) => event.stopPropagation()}
+          >
+            <li>
+              <button
+                type="button"
+                className="context-menu-item dangerous"
+                onClick={() => void deleteBoard(boardMenu.board)}
+              >
+                <div className="context-menu-item__label">Удалить доску</div>
+              </button>
+            </li>
+          </ul>
+        </EditorPortal>
+      )}
       {agentSetup && (
         <AgentPanel
           setup={agentSetup}

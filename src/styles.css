@@ -485,3 +485,36 @@ body {
   font-size: 0.8125rem;
   line-height: 1.5;
 }
+
+/* -------------------------------------------------------- меню доски и тост --
+ * Меню собрано на классах контекстного меню редактора (`context-menu`,
+ * `context-menu-item`), поэтому шрифт, фон, наведение и тёмная тема у него
+ * общие с меню холста. Своё здесь только позиционирование по курсору.
+ */
+
+.excalidraw .localboard-board-menu {
+  position: fixed;
+  z-index: 10;
+  margin: 0;
+}
+
+/*
+ * Тост редактора — скруглённая пилюля с текстом по центру и полосой прогресса
+ * под ним. Для одного короткого сообщения это лишний декор: делаем ровную
+ * плашку с текстом по левому краю, крестик у неё уже свой.
+ */
+.excalidraw .Toast {
+  border-radius: var(--border-radius-lg);
+  padding: 0.625rem 0.75rem;
+}
+
+.excalidraw .Toast .Toast__message {
+  padding-right: 1.75rem;
+  padding-left: 0;
+  font-size: 0.8125rem;
+  text-align: left;
+}
+
+.excalidraw .Toast .Toast__progress-bar {
+  display: none;
+}
