@@ -61,8 +61,12 @@ rm -rf "$DMG_ROOT"
 mkdir -p "$DMG_ROOT/.background"
 ditto "$APP_PATH" "$DMG_ROOT/LocalBoard.app"
 ln -s /Applications "$DMG_ROOT/Applications"
+
+# Версия берётся из собранного бандла, а не из конфига: в окне установки должно
+# стоять то, что человек в это окно и положил.
+VERSION=$(defaults read "$APP_PATH/Contents/Info.plist" CFBundleShortVersionString)
 swift "$PROJECT_ROOT/scripts/make-dmg-background.swift" \
-  "$DMG_ROOT/.background/background.tiff" >/dev/null
+  "$DMG_ROOT/.background/background.tiff" "$VERSION" >/dev/null
 
 # Окно установщика раскладывается явно. Один `hdiutil create` даёт неоформленное
 # окно Finder — какой у человека вид списка и размер окна по умолчанию, такой и
@@ -100,14 +104,14 @@ tell application "Finder"
     set current view of container window to icon view
     set toolbar visible of container window to false
     set statusbar visible of container window to false
-    set the bounds of container window to {240, 140, 880, 560}
+    set the bounds of container window to {220, 130, 920, 678}
     set viewOptions to the icon view options of container window
     set arrangement of viewOptions to not arranged
     set icon size of viewOptions to 128
     set text size of viewOptions to 13
     set background picture of viewOptions to POSIX file "$MOUNT_POINT/.background/background.tiff"
-    set position of item "LocalBoard.app" of container window to {160, 210}
-    set position of item "Applications" of container window to {480, 210}
+    set position of item "LocalBoard.app" of container window to {175, 240}
+    set position of item "Applications" of container window to {525, 240}
     update without registering applications
     delay 3
   end tell
