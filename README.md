@@ -38,7 +38,7 @@ macOS 12 (Monterey) или новее.
 
 ## Сборка из исходников
 
-Нужны **Node 20+**, **Rust** (stable) и **Xcode Command Line Tools**.
+Нужны **Node 20+**, **Rust** (stable), **Xcode Command Line Tools** и **yarn 1.x** (им собирается сам редактор).
 
 ```bash
 git clone https://github.com/ilyaVasiliev1/localboard.git
@@ -47,7 +47,9 @@ cd localboard
 npm run tauri dev           # запуск в режиме разработки
 ```
 
-Редактор Excalidraw **не вендорится** в этот репозиторий: `scripts/setup.sh` клонирует его на строго зафиксированном коммите в `upstream-excalidraw/` и подключает как `file:`-зависимости. Пин намеренный — LocalBoard собирается из исходников редактора, поэтому «свежий master» однажды поменял бы API под ногами.
+Редактор Excalidraw **не вендорится** в этот репозиторий: `scripts/setup.sh` клонирует его на строго зафиксированном коммите в `upstream-excalidraw/`, собирает его пакеты и подключает как `file:`-зависимости. Пин намеренный — LocalBoard собирается из пакетов редактора, поэтому «свежий master» однажды поменял бы API под ногами.
+
+Первый `setup.sh` идёт долго: пакеты Excalidraw отдают `dist/`, которого в их репозитории нет, поэтому его приходится собирать (`yarn install && yarn build:packages`). Повторные запуски этот шаг пропускают.
 
 ### Релизная сборка
 
