@@ -26,6 +26,7 @@ import {
   boardIcon,
   boardsIcon,
   chevronIcon,
+  downloadIcon,
   closeIcon,
   folderIcon,
   pinIcon,
@@ -34,6 +35,7 @@ import {
   sparklesIcon,
 } from "./icons";
 import { applySchemeRequest } from "./scheme-inbox";
+import { checkForUpdates } from "./updates";
 import AgentPanel from "./AgentPanel";
 
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
@@ -126,9 +128,10 @@ export default function App() {
   const [current, setCurrent] = useState<Board | null>(null);
   const [status, setStatus] = useState("Готово");
   const [docked, setDocked] = useState(false);
-  const [creating, setCreating] = useState(false);
+  const [creating, setCreating] = useState<string | null>(null);
   const [newBoardName, setNewBoardName] = useState("Новая доска");
   const [newBoardError, setNewBoardError] = useState("");
+  const [dragOver, setDragOver] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
   const [agentSetup, setAgentSetup] = useState<AgentSetup | null>(null);
   const [agentTheme, setAgentTheme] = useState("light");
@@ -325,23 +328,22 @@ export default function App() {
       return;
     }
     try {
-      if (!activeFolder) {
-        setNewBoardError("Сначала подключите папку");
+      if (!creating) {
         return;
       }
       const board = await invoke<Board>("create_board", {
-        directory: activeFolder.path,
+        directory: creating,
         name: withExtension(name),
       });
-      await listBoards(activeFolder.path);
-      setCreating(false);
+      await listBoards(creating);
+      setCreating(null);
       setNewBoardError("");
       setFilter("");
       await openBoard(board);
     } catch (error) {
       setNewBoardError(String(error));
     }
-  }, [activeFolder, listBoards, newBoardName, openBoard]);
+  }, [creating, listBoards, newBoardName, openBoard]);
 
   const openAgentPanel = useCallback(async () => {
     try {
@@ -463,6 +465,41 @@ export default function App() {
       }
     },
     [clearCanvas, folders, listBoards, openBoard, toast]
+  );
+
+  /**
+   * Перенос доски в другую папку. Отложенное сохранение сбрасывается на диск
+   * заранее — по той же причине, что и при переименовании: таймер дописал бы
+   * правки по старому пути и вернул доску на прежнее место.
+   */
+  const moveBoard = useCallback(
+    async (board: Board, target: Folder) => {
+      setDragOver(null);
+      const from = folderOf(folders, board);
+      if (!from || from.path === target.path) {
+        return;
+      }
+      try {
+        await flushPendingSave();
+        const moved = await invoke<Board>("move_board", {
+          path: board.path,
+          directory: target.path,
+        });
+        await Promise.all([listBoards(from.path), listBoards(target.path)]);
+        if (currentRef.current?.path === board.path) {
+          currentRef.current = moved;
+          setCurrent(moved);
+          localStorage.setItem(LAST_BOARD_KEY, moved.path);
+        }
+        setCollapsed((previous) =>
+          previous.filter((path) => path !== target.path),
+        );
+        toast(`«${boardTitle(board)}» → ${target.name}`);
+      } catch (error) {
+        toast(`Не удалось перенести: ${error}`);
+      }
+    },
+    [flushPendingSave, folders, listBoards, toast],
   );
 
   /** Подключение папки: доски остаются там, где лежат, приложение лишь узнаёт о них. */
@@ -755,6 +792,13 @@ export default function App() {
               Работа с Claude…
             </MainMenu.Item>
             <MainMenu.Item
+              icon={downloadIcon}
+              onSelect={() => void checkForUpdates((message) => toast(message))}
+              aria-label="Проверить обновления"
+            >
+              Проверить обновления…
+            </MainMenu.Item>
+            <MainMenu.Item
               icon={saveIcon}
               onSelect={saveCopyAs}
               aria-label="Сохранить как"
@@ -792,18 +836,7 @@ export default function App() {
                 shorten, and its close button doesn't land where the button
                 that opened the panel was. */}
             <div className="localboard-sidebar__header">
-              <button
-                type="button"
-                className="localboard-primary"
-                onClick={() => {
-                  setNewBoardName("Новая доска");
-                  setNewBoardError("");
-                  setCreating(true);
-                }}
-              >
-                {plusIcon}
-                Новая доска
-              </button>
+              <h2 className="localboard-sidebar__title">Доски</h2>
               <div className="localboard-sidebar__header-buttons">
                 <button
                   type="button"
@@ -832,62 +865,20 @@ export default function App() {
             </div>
 
             <div className="localboard-sidebar__body">
-              {creating ? (
-                <form
-                  className="localboard-new"
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    void createBoard();
-                  }}
-                >
-                  <input
-                    autoFocus
-                    className="localboard-input"
-                    value={newBoardName}
-                    aria-label="Название доски"
-                    onChange={(event) => {
-                      setNewBoardName(event.target.value);
-                      setNewBoardError("");
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key === "Escape") {
-                        event.stopPropagation();
-                        setCreating(false);
-                      }
-                    }}
-                  />
-                  {newBoardError && (
-                    <p className="localboard-new__error">{newBoardError}</p>
-                  )}
-                  <div className="localboard-new__actions">
-                    <button
-                      type="button"
-                      className="localboard-secondary"
-                      onClick={() => setCreating(false)}
-                    >
-                      Отмена
-                    </button>
-                    <button type="submit" className="localboard-primary">
-                      Создать
-                    </button>
-                  </div>
-                </form>
-              ) : (
-                <input
-                  className="localboard-input"
-                  type="search"
-                  placeholder="Поиск по доскам…"
-                  aria-label="Поиск по доскам"
-                  value={filter}
-                  onChange={(event) => setFilter(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Escape" && filter) {
-                      event.stopPropagation();
-                      setFilter("");
-                    }
-                  }}
-                />
-              )}
+              <input
+                className="localboard-input"
+                type="search"
+                placeholder="Поиск по доскам…"
+                aria-label="Поиск по доскам"
+                value={filter}
+                onChange={(event) => setFilter(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape" && filter) {
+                    event.stopPropagation();
+                    setFilter("");
+                  }
+                }}
+              />
 
               <div className="localboard-list">
                 {folders.length === 0 && (
@@ -910,7 +901,36 @@ export default function App() {
                   const folded = !needle && collapsed.includes(item.path);
                   const list = visibleBoards(item.path);
                   return (
-                    <section className="localboard-folder" key={item.path}>
+                    <section
+                      className={cx(
+                        "localboard-folder",
+                        dragOver === item.path && "localboard-folder--drop",
+                      )}
+                      key={item.path}
+                      onDragOver={(event) => {
+                        // Без preventDefault браузер считает область
+                        // непринимающей и курсор показывает запрет.
+                        event.preventDefault();
+                        setDragOver(item.path);
+                      }}
+                      onDragLeave={() =>
+                        setDragOver((current) =>
+                          current === item.path ? null : current,
+                        )
+                      }
+                      onDrop={(event) => {
+                        event.preventDefault();
+                        const path = event.dataTransfer.getData("text/plain");
+                        const board = Object.values(boards)
+                          .flat()
+                          .find((candidate) => candidate.path === path);
+                        if (board) {
+                          void moveBoard(board, item);
+                        } else {
+                          setDragOver(null);
+                        }
+                      }}
+                    >
                       <div className="localboard-folder__header">
                         <button
                           type="button"
@@ -949,6 +969,22 @@ export default function App() {
                         <button
                           type="button"
                           className="dropdown-menu-button localboard-button"
+                          title="Новая доска в этой папке"
+                          aria-label="Новая доска в этой папке"
+                          onClick={() => {
+                            setNewBoardName("Новая доска");
+                            setNewBoardError("");
+                            setCreating(item.path);
+                            setCollapsed((previous) =>
+                              previous.filter((path) => path !== item.path),
+                            );
+                          }}
+                        >
+                          {plusIcon}
+                        </button>
+                        <button
+                          type="button"
+                          className="dropdown-menu-button localboard-button"
                           title="Показать в Finder"
                           aria-label="Показать в Finder"
                           onClick={() =>
@@ -959,7 +995,54 @@ export default function App() {
                         </button>
                       </div>
 
-                      {!folded && list.length === 0 && (
+                      {creating === item.path && (
+                        <form
+                          className="localboard-new"
+                          onSubmit={(event) => {
+                            event.preventDefault();
+                            void createBoard();
+                          }}
+                        >
+                          <input
+                            autoFocus
+                            className="localboard-input"
+                            value={newBoardName}
+                            aria-label="Название доски"
+                            onChange={(event) => {
+                              setNewBoardName(event.target.value);
+                              setNewBoardError("");
+                            }}
+                            onKeyDown={(event) => {
+                              if (event.key === "Escape") {
+                                event.stopPropagation();
+                                setCreating(null);
+                              }
+                            }}
+                          />
+                          {newBoardError && (
+                            <p className="localboard-new__error">
+                              {newBoardError}
+                            </p>
+                          )}
+                          <div className="localboard-new__actions">
+                            <button
+                              type="button"
+                              className="localboard-secondary"
+                              onClick={() => setCreating(null)}
+                            >
+                              Отмена
+                            </button>
+                            <button
+                              type="submit"
+                              className="localboard-primary"
+                            >
+                              Создать
+                            </button>
+                          </div>
+                        </form>
+                      )}
+
+                      {!folded && list.length === 0 && creating !== item.path && (
                         <p className="localboard-list__empty">
                           {needle ? "Ничего не найдено" : "Пока нет досок"}
                         </p>
@@ -1015,6 +1098,15 @@ export default function App() {
                               )}
                               aria-current={active}
                               title={boardTitle(board)}
+                              draggable
+                              onDragStart={(event) => {
+                                event.dataTransfer.setData(
+                                  "text/plain",
+                                  board.path,
+                                );
+                                event.dataTransfer.effectAllowed = "move";
+                              }}
+                              onDragEnd={() => setDragOver(null)}
                               onContextMenu={(event) => {
                                 event.preventDefault();
                                 void invoke("show_board_menu", {

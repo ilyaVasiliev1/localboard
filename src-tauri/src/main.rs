@@ -458,6 +458,33 @@ fn rename_board(path: String, name: String) -> Result<Board, String> {
     Ok(board(&target))
 }
 
+/// Перенос доски в другую подключённую папку.
+///
+/// Доска — это файл, поэтому перенос между проектами и есть перенос файла; ни
+/// содержимое, ни история правок от этого не меняются.
+#[tauri::command]
+fn move_board(path: String, directory: String) -> Result<Board, String> {
+    let source = PathBuf::from(&path);
+    let target_dir = PathBuf::from(&directory);
+    if !target_dir.is_dir() {
+        return Err("Папки назначения нет".into());
+    }
+    let name = source.file_name().ok_or("Некорректный путь")?;
+    let target = target_dir.join(name);
+    if target == source {
+        return Ok(board(&source));
+    }
+    if target.exists() {
+        return Err("В этой папке уже есть доска с таким названием".into());
+    }
+    // Между томами `rename` не работает — тогда честная копия с удалением.
+    if fs::rename(&source, &target).is_err() {
+        fs::copy(&source, &target).map_err(|e| e.to_string())?;
+        fs::remove_file(&source).map_err(|e| e.to_string())?;
+    }
+    Ok(board(&target))
+}
+
 /// Удаление доски — в корзину, а не в небытие.
 ///
 /// Доска это часы работы, и подтверждение в диалоге защищает только от
@@ -614,6 +641,8 @@ fn main() {
             }
         }))
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .invoke_handler(tauri::generate_handler![
             list_folders,
             add_folder,
@@ -624,6 +653,7 @@ fn main() {
             save_board,
             delete_board,
             rename_board,
+            move_board,
             show_board_menu,
             show_folder_menu,
             take_scheme_request,

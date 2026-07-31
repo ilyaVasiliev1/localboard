@@ -14,6 +14,9 @@ set -euo pipefail
 
 PROJECT_ROOT="${0:A:h:h}"
 SIGN_IDENTITY="${SIGN_IDENTITY:--}"
+# Ключ подписи обновлений живёт вне репозитория. Без него сборка не падает —
+# получается обычный DMG, просто без артефактов автообновления.
+UPDATER_KEY="${TAURI_SIGNING_PRIVATE_KEY_PATH:-$PROJECT_ROOT/../../secrets/localboard-updater.key}"
 NOTARY_PROFILE="${NOTARY_PROFILE:-}"
 OUTPUT_DIR="$PROJECT_ROOT/.tmp/release-artifacts"
 STAGING="$PROJECT_ROOT/.tmp/release"
@@ -35,7 +38,17 @@ mkdir -p "$OUTPUT_DIR" "$STAGING"
 # --bundles app: DMG собирается ниже вручную, потому что стандартный установщик
 # Tauri не умеет ни фона, ни раскладки окна.
 cd "$PROJECT_ROOT"
-npm run tauri -- build --bundles app
+if [[ -f "$UPDATER_KEY" ]]; then
+  # Именно содержимое ключа, а не путь: путь эта версия CLI не читает и падает
+  # на «public key found, but no private key».
+  TAURI_SIGNING_PRIVATE_KEY="$(<"$UPDATER_KEY")" \
+  TAURI_SIGNING_PRIVATE_KEY_PASSWORD="${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:-}" \
+    npm run tauri -- build --bundles app
+else
+  print -u2 "Ключ обновлений не найден: $UPDATER_KEY"
+  print -u2 "Собираю без артефактов автообновления."
+  npm run tauri -- build --bundles app
+fi
 
 if [[ ! -d "$APP_PATH" ]]; then
   print -u2 "Сборка не дала $APP_PATH"
@@ -132,6 +145,33 @@ if [[ -n "$NOTARY_PROFILE" && "$SIGN_IDENTITY" != "-" ]]; then
     --keychain-profile "$NOTARY_PROFILE" --wait
   xcrun stapler staple "$OUTPUT_DIR/$ARTIFACT_NAME"
   xcrun stapler validate "$OUTPUT_DIR/$ARTIFACT_NAME"
+fi
+
+# Манифест обновления. Он и есть «сервер обновлений»: приложение читает по
+# постоянной ссылке на последний релиз, поэтому ничего поднимать не нужно.
+UPDATE_ARCHIVE="$PROJECT_ROOT/src-tauri/target/release/bundle/macos/LocalBoard.app.tar.gz"
+if [[ -f "$UPDATE_ARCHIVE.sig" ]]; then
+  cp "$UPDATE_ARCHIVE" "$OUTPUT_DIR/"
+  cp "$UPDATE_ARCHIVE.sig" "$OUTPUT_DIR/"
+  SIGNATURE=$(<"$UPDATE_ARCHIVE.sig")
+  cat > "$OUTPUT_DIR/latest.json" <<JSON
+{
+  "version": "$VERSION",
+  "notes": "Обновление LocalBoard $VERSION",
+  "pub_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "platforms": {
+    "darwin-aarch64": {
+      "signature": "$SIGNATURE",
+      "url": "https://github.com/ilyaVasiliev1/localboard/releases/download/v$VERSION/LocalBoard.app.tar.gz"
+    },
+    "darwin-x86_64": {
+      "signature": "$SIGNATURE",
+      "url": "https://github.com/ilyaVasiliev1/localboard/releases/download/v$VERSION/LocalBoard.app.tar.gz"
+    }
+  }
+}
+JSON
+  print "Артефакты обновления: LocalBoard.app.tar.gz, .sig, latest.json"
 fi
 
 if (( INSTALL )); then

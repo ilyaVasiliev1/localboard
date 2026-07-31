@@ -613,3 +613,26 @@ body {
   width: 0.875rem;
   height: 0.875rem;
 }
+
+/* Заголовок панели вместо прежней кнопки «Новая доска»: куда создаётся доска,
+   теперь отвечает плюсик у конкретного раздела. */
+.excalidraw .localboard-sidebar__title {
+  margin: 0;
+  margin-right: auto;
+  padding-left: 0.25rem;
+  font-family: var(--ui-font);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+/* Раздел, над которым висит перетаскиваемая доска. Подсветка рамкой, а не
+   заливкой: заливка спорит с выделением активной доски внутри раздела. */
+.excalidraw .localboard-folder--drop {
+  border-radius: var(--border-radius-lg);
+  outline: 2px dashed var(--color-primary);
+  outline-offset: 2px;
+}
+
+.excalidraw .localboard-list__item[draggable="true"] {
+  -webkit-user-drag: element;
+}
