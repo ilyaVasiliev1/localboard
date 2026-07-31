@@ -138,3 +138,12 @@ export const saveIcon = createIcon(
   </g>,
   tablerIconProps,
 );
+
+// tabler-icons: chevron-down (свернуть и развернуть папку)
+export const chevronIcon = createIcon(
+  <g strokeWidth={1.5}>
+    <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+    <path d="M6 9l6 6l6 -6" />
+  </g>,
+  tablerIconProps,
+);

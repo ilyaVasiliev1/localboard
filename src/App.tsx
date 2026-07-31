@@ -25,7 +25,9 @@ import { listen } from "@tauri-apps/api/event";
 import {
   boardIcon,
   boardsIcon,
+  chevronIcon,
   closeIcon,
+  folderIcon,
   pinIcon,
   plusIcon,
   saveIcon,
@@ -37,12 +39,14 @@ import AgentPanel from "./AgentPanel";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 
 type Board = { name: string; path: string };
+type Folder = { name: string; path: string };
 type Scene = { elements: any[]; appState: any; files: any };
 type AgentSetup = { boardsDir: string; guide: string; cli: string };
 
 const EXT = ".excalidraw";
 const BOARDS_SIDEBAR = "boards";
 const LAST_BOARD_KEY = "localboard:last-board";
+const COLLAPSED_KEY = "localboard:collapsed-folders";
 /** Long enough not to thrash the disk, short enough to feel like autosave. */
 const SAVE_DEBOUNCE_MS = 1200;
 
@@ -51,8 +55,11 @@ const EMPTY_SCENE: Scene = { elements: [], appState: {}, files: {} };
 const boardTitle = (board: Board | null) =>
   board ? board.name.replace(EXT, "") : "";
 
-const folderTitle = (path: string) =>
-  path.split("/").filter(Boolean).pop() ?? path;
+/** Папка доски — та подключённая, внутри которой лежит её файл. */
+const folderOf = (folders: Folder[], board: Board | null) =>
+  board
+    ? folders.find((item) => board.path.startsWith(`${item.path}/`)) ?? null
+    : null;
 
 /**
  * Everything we persist about a scene, boiled down to a comparable string —
@@ -107,8 +114,15 @@ class EditorBoundary extends Component<
 
 export default function App() {
   const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null);
-  const [folder, setFolder] = useState("");
-  const [boards, setBoards] = useState<Board[]>([]);
+  const [folders, setFolders] = useState<Folder[]>([]);
+  const [boards, setBoards] = useState<Record<string, Board[]>>({});
+  const [collapsed, setCollapsed] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem(COLLAPSED_KEY) ?? "[]");
+    } catch {
+      return [];
+    }
+  });
   const [current, setCurrent] = useState<Board | null>(null);
   const [status, setStatus] = useState("Готово");
   const [docked, setDocked] = useState(false);
@@ -124,9 +138,18 @@ export default function App() {
   } | null>(null);
 
   const needle = filter.trim().toLowerCase();
-  const visibleBoards = needle
-    ? boards.filter((board) => board.name.toLowerCase().includes(needle))
-    : boards;
+  const visibleBoards = (directory: string) => {
+    const list = boards[directory] ?? [];
+    return needle
+      ? list.filter((board) => board.name.toLowerCase().includes(needle))
+      : list;
+  };
+  const totalBoards = Object.values(boards).reduce(
+    (sum, list) => sum + list.length,
+    0
+  );
+  /** Куда попадёт новая доска: рядом с открытой, иначе в первую подключённую. */
+  const activeFolder = folderOf(folders, current) ?? folders[0] ?? null;
 
   const currentRef = useRef<Board | null>(null);
   const sceneRef = useRef<Scene>(EMPTY_SCENE);
@@ -143,8 +166,34 @@ export default function App() {
 
   const listBoards = useCallback(async (directory: string) => {
     const list = await invoke<Board[]>("list_boards", { directory });
-    setBoards(list);
+    setBoards((previous) => ({ ...previous, [directory]: list }));
     return list;
+  }, []);
+
+  /**
+   * Перечитывает список папок и доски в каждой. Папка, которую унесли или
+   * переименовали снаружи, отваливается на стороне бэкенда — здесь просто
+   * приходит список короче.
+   */
+  const refreshFolders = useCallback(async () => {
+    const list = await invoke<Folder[]>("list_folders");
+    setFolders(list);
+    const pairs = await Promise.all(
+      list.map(async (item) => {
+        try {
+          return [
+            item.path,
+            await invoke<Board[]>("list_boards", {
+              directory: item.path,
+            }),
+          ] as const;
+        } catch {
+          return [item.path, [] as Board[]] as const;
+        }
+      })
+    );
+    setBoards(Object.fromEntries(pairs));
+    return { folders: list, boards: Object.fromEntries(pairs) };
   }, []);
 
   const writeBoard = useCallback(async (board: Board, scene: Scene) => {
@@ -276,11 +325,15 @@ export default function App() {
       return;
     }
     try {
+      if (!activeFolder) {
+        setNewBoardError("Сначала подключите папку");
+        return;
+      }
       const board = await invoke<Board>("create_board", {
-        directory: folder,
+        directory: activeFolder.path,
         name: withExtension(name),
       });
-      await listBoards(folder);
+      await listBoards(activeFolder.path);
       setCreating(false);
       setNewBoardError("");
       setFilter("");
@@ -288,18 +341,20 @@ export default function App() {
     } catch (error) {
       setNewBoardError(String(error));
     }
-  }, [folder, listBoards, newBoardName, openBoard]);
+  }, [activeFolder, listBoards, newBoardName, openBoard]);
 
   const openAgentPanel = useCallback(async () => {
     try {
       setAgentTheme(api?.getAppState().theme ?? "light");
       setAgentSetup(
-        await invoke<AgentSetup>("agent_setup", { directory: folder })
+        await invoke<AgentSetup>("agent_setup", {
+          directory: (activeFolder ?? folders[0])?.path ?? "",
+        })
       );
     } catch (error) {
       toast(`Не удалось открыть панель: ${error}`);
     }
-  }, [api, folder, toast]);
+  }, [activeFolder, api, folders, toast]);
 
   /**
    * «Сохранить как…» ведёт сразу в системное окно сохранения. Штатный пункт
@@ -352,7 +407,7 @@ export default function App() {
           path: board.path,
           name: withExtension(name),
         });
-        await listBoards(folder);
+        await listBoards(folderOf(folders, board)?.path ?? "");
         if (currentRef.current?.path === board.path) {
           currentRef.current = renamed;
           setCurrent(renamed);
@@ -363,7 +418,7 @@ export default function App() {
         toast(`Не удалось переименовать: ${error}`);
       }
     },
-    [flushPendingSave, folder, listBoards, renaming, toast],
+    [flushPendingSave, folders, listBoards, renaming, toast]
   );
 
   /**
@@ -390,7 +445,7 @@ export default function App() {
 
       try {
         await invoke("delete_board", { path: board.path });
-        const list = await listBoards(folder);
+        const list = await listBoards(folderOf(folders, board)?.path ?? "");
         if (wasOpen) {
           if (list.length > 0) {
             await openBoard(list[0]);
@@ -407,52 +462,59 @@ export default function App() {
         toast(`Не удалось удалить: ${error}`);
       }
     },
-    [clearCanvas, folder, listBoards, openBoard, toast]
+    [clearCanvas, folders, listBoards, openBoard, toast]
   );
 
-  const chooseFolder = useCallback(async () => {
+  /** Подключение папки: доски остаются там, где лежат, приложение лишь узнаёт о них. */
+  const addFolder = useCallback(async () => {
     const picked = await open({
       directory: true,
       multiple: false,
-      defaultPath: folder || undefined,
-      title: "Папка досок",
+      title: "Подключить папку с досками",
     });
     if (typeof picked !== "string") {
       return;
     }
-    await flushPendingSave();
     try {
-      const directory = await invoke<string>("set_board_directory", {
-        directory: picked,
-      });
-      setFolder(directory);
-      const list = await listBoards(directory);
+      await invoke<Folder[]>("add_folder", { path: picked });
+      await refreshFolders();
+      setCollapsed((previous) => previous.filter((path) => path !== picked));
       setFilter("");
-      setCreating(false);
-      api?.toggleSidebar({ name: BOARDS_SIDEBAR, force: true });
-
-      // The board that was open lives in the previous folder.
-      if (list.length > 0) {
-        await openBoard(list[0]);
-      } else {
-        clearCanvas();
-        setCurrent(null);
-        setStatus("Готово");
-        localStorage.removeItem(LAST_BOARD_KEY);
-        setWindowTitle("LocalBoard");
-      }
     } catch (error) {
-      toast(`Не удалось сменить папку: ${error}`);
+      toast(`Не удалось подключить папку: ${error}`);
     }
-  }, [
-    api,
-    clearCanvas,
-    flushPendingSave,
-    folder,
-    listBoards,
-    openBoard,
-    toast,
-  ]);
+  }, [refreshFolders, toast]);
+
+  /**
+   * Отключение папки. Ни один файл не трогается — папка исчезает из списка, и
+   * только. Поэтому подтверждения здесь нет: обратное действие стоит два клика.
+   */
+  const removeFolder = useCallback(
+    async (target: Folder) => {
+      try {
+        await invoke<Folder[]>("remove_folder", { path: target.path });
+        const next = await refreshFolders();
+        // Открытая доска могла жить именно в этой папке.
+        if (currentRef.current?.path.startsWith(`${target.path}/`)) {
+          window.clearTimeout(saveTimer.current);
+          saveTimer.current = undefined;
+          clearCanvas();
+          setCurrent(null);
+          setStatus("Готово");
+          localStorage.removeItem(LAST_BOARD_KEY);
+          setWindowTitle("LocalBoard");
+        }
+        toast(
+          next.folders.length === 0
+            ? "Папка отключена. Подключите другую, чтобы продолжить"
+            : `Папка «${target.name}» отключена`
+        );
+      } catch (error) {
+        toast(`Не удалось отключить папку: ${error}`);
+      }
+    },
+    [clearCanvas, refreshFolders, toast]
+  );
 
   // Resolve the boards folder and reopen whatever was open last time.
   useEffect(() => {
@@ -461,15 +523,11 @@ export default function App() {
     }
     let cancelled = false;
     void (async () => {
-      const directory = await invoke<string>("get_board_directory");
+      const { boards: byFolder } = await refreshFolders();
       if (cancelled) {
         return;
       }
-      setFolder(directory);
-      const list = await listBoards(directory);
-      if (cancelled) {
-        return;
-      }
+      const list = Object.values(byFolder).flat();
       const last = localStorage.getItem(LAST_BOARD_KEY);
       const board = list.find((item) => item.path === last) ?? list[0];
       if (board) {
@@ -485,16 +543,60 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [api]);
 
-  // Ящик схем: раз в полторы секунды заглянуть, не положил ли внешний
-  // инструмент запрос. Опрос вместо слежения за файловой системой — потому что
-  // цена вопроса здесь одно чтение имён каталога, а watcher принёс бы
-  // зависимость, права и отдельный класс ошибок ради того же результата.
+  /**
+   * Ящик схем — в каждой подключённой папке свой. Опрос вместо слежения за
+   * файловой системой: цена здесь одно чтение имён каталога, а watcher принёс
+   * бы зависимость, права и отдельный класс ошибок ради того же результата.
+   */
   useEffect(() => {
-    if (!api || !folder) {
+    if (!api || folders.length === 0) {
       return;
     }
     let cancelled = false;
     let busy = false;
+
+    const handle = async (directory: string) => {
+      const request = await invoke<{ name: string; content: string } | null>(
+        "take_scheme_request",
+        { directory }
+      );
+      if (!request || cancelled) {
+        return;
+      }
+      try {
+        const board = currentRef.current;
+        // Схема живёт в файле доски, поэтому без открытой доски её некуда
+        // положить. И класть её в доску ЧУЖОГО проекта тоже нельзя: запрос
+        // пришёл из конкретной папки, и ответ должен остаться в ней.
+        if (!board) {
+          throw new Error("Не открыта доска — схему некуда сохранять");
+        }
+        if (!board.path.startsWith(`${directory}/`)) {
+          throw new Error(
+            "Открыта доска из другой папки — откройте доску этого проекта"
+          );
+        }
+        const { count, title } = await applySchemeRequest(api, request.content);
+        await invoke("finish_scheme_request", {
+          directory,
+          name: request.name,
+        });
+        toast(
+          title
+            ? `Схема «${title}» добавлена: ${count} элементов`
+            : `Схема добавлена: ${count} элементов`
+        );
+      } catch (error) {
+        // Причина уезжает файлом рядом с запросом: тот, кто его положил,
+        // работает не в этом окне и консоли приложения не видит.
+        await invoke("finish_scheme_request", {
+          directory,
+          name: request.name,
+          error: String(error),
+        });
+        toast(`Схему добавить не удалось: ${error}`);
+      }
+    };
 
     const tick = async () => {
       if (busy || cancelled) {
@@ -502,46 +604,17 @@ export default function App() {
       }
       busy = true;
       try {
-        const request = await invoke<{ name: string; content: string } | null>(
-          "take_scheme_request",
-          { directory: folder }
-        );
-        if (!request || cancelled) {
-          return;
+        for (const item of folders) {
+          if (cancelled) {
+            break;
+          }
+          try {
+            await handle(item.path);
+          } catch {
+            // Папку могли отключить между опросами — не повод шуметь тостом
+            // каждые полторы секунды.
+          }
         }
-        // Схема живёт в файле доски. Без открытой доски вставка была бы
-        // потеряна ближайшим переключением, поэтому это отказ, а не тихая
-        // вставка «куда-нибудь».
-        if (!currentRef.current) {
-          throw new Error("Не открыта доска — схему некуда сохранять");
-        }
-        try {
-          const { count, title } = await applySchemeRequest(
-            api,
-            request.content
-          );
-          await invoke("finish_scheme_request", {
-            directory: folder,
-            name: request.name,
-          });
-          toast(
-            title
-              ? `Схема «${title}» добавлена: ${count} элементов`
-              : `Схема добавлена: ${count} элементов`
-          );
-        } catch (error) {
-          // Причина уезжает файлом рядом с запросом: тот, кто его положил,
-          // работает не в этом окне и консоли приложения не видит.
-          await invoke("finish_scheme_request", {
-            directory: folder,
-            name: request.name,
-            error: String(error),
-          });
-          toast(`Схему добавить не удалось: ${error}`);
-        }
-      } catch {
-        // Ящика может не быть, папка могла уехать — это не повод шуметь
-        // тостом каждые полторы секунды.
       } finally {
         busy = false;
       }
@@ -553,7 +626,7 @@ export default function App() {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [api, folder, toast]);
+  }, [api, folders, toast]);
 
   /**
    * Нативное меню WKWebView («Обновить», «Назад») к рисованию отношения не
@@ -581,7 +654,9 @@ export default function App() {
     const pending = listen<{ action: string; path: string }>(
       "board-menu",
       ({ payload }) => {
-        const board = boards.find((item) => item.path === payload.path);
+        const board = Object.values(boards)
+          .flat()
+          .find((item) => item.path === payload.path);
         if (!board) {
           return;
         }
@@ -590,12 +665,31 @@ export default function App() {
         } else if (payload.action === "delete") {
           void deleteBoard(board);
         }
-      },
+      }
     );
     return () => {
       void pending.then((unlisten) => unlisten());
     };
   }, [boards, deleteBoard]);
+
+  useEffect(() => {
+    const pending = listen<{ action: string; path: string }>(
+      "folder-menu",
+      ({ payload }) => {
+        const target = folders.find((item) => item.path === payload.path);
+        if (target && payload.action === "remove") {
+          void removeFolder(target);
+        }
+      }
+    );
+    return () => {
+      void pending.then((unlisten) => unlisten());
+    };
+  }, [folders, removeFolder]);
+
+  useEffect(() => {
+    localStorage.setItem(COLLAPSED_KEY, JSON.stringify(collapsed));
+  }, [collapsed]);
 
   useEffect(() => () => window.clearTimeout(saveTimer.current), []);
 
@@ -796,79 +890,154 @@ export default function App() {
               )}
 
               <div className="localboard-list">
-                {visibleBoards.length === 0 && !creating && (
+                {folders.length === 0 && (
                   <p className="localboard-list__empty">
-                    {boards.length === 0
-                      ? "В этой папке пока нет досок"
-                      : "Ничего не найдено"}
+                    Ни одной подключённой папки
                   </p>
                 )}
-                {visibleBoards.map((board) => {
-                  const active = current?.path === board.path;
+                {needle && totalBoards > 0 && (
+                  <p className="localboard-list__empty">
+                    {folders.every(
+                      (item) => visibleBoards(item.path).length === 0
+                    ) && "Ничего не найдено"}
+                  </p>
+                )}
 
-                  // Переименование прямо в строке списка, как в Finder: имя
-                  // правится там же, где читается, без отдельного окна.
-                  if (renaming?.path === board.path) {
-                    return (
-                      <form
-                        key={board.path}
-                        className="localboard-rename"
-                        onSubmit={(event) => {
-                          event.preventDefault();
-                          void commitRename(board);
-                        }}
-                      >
-                        <input
-                          autoFocus
-                          className="localboard-input"
-                          aria-label="Название доски"
-                          value={renaming.value}
-                          onChange={(event) =>
-                            setRenaming({
-                              path: board.path,
-                              value: event.target.value,
-                            })
-                          }
-                          onBlur={() => void commitRename(board)}
-                          onKeyDown={(event) => {
-                            if (event.key === "Escape") {
-                              event.stopPropagation();
-                              setRenaming(null);
-                            }
-                          }}
-                        />
-                      </form>
-                    );
-                  }
-
+                {folders.map((item) => {
+                  // При поиске папки раскрыты принудительно: иначе найденная
+                  // доска прячется внутри свёрнутой секции, и поиск выглядит
+                  // сломанным.
+                  const folded = !needle && collapsed.includes(item.path);
+                  const list = visibleBoards(item.path);
                   return (
-                    <button
-                      type="button"
-                      key={board.path}
-                      className={cx(
-                        "localboard-list__item",
-                        active && "localboard-list__item--active"
+                    <section className="localboard-folder" key={item.path}>
+                      <div className="localboard-folder__header">
+                        <button
+                          type="button"
+                          className="localboard-folder__toggle"
+                          aria-expanded={!folded}
+                          title={item.path}
+                          onContextMenu={(event) => {
+                            event.preventDefault();
+                            void invoke("show_folder_menu", {
+                              path: item.path,
+                            });
+                          }}
+                          onClick={() =>
+                            setCollapsed((previous) =>
+                              previous.includes(item.path)
+                                ? previous.filter((path) => path !== item.path)
+                                : [...previous, item.path]
+                            )
+                          }
+                        >
+                          <span
+                            className={cx(
+                              "localboard-folder__chevron",
+                              folded && "localboard-folder__chevron--folded"
+                            )}
+                          >
+                            {chevronIcon}
+                          </span>
+                          <span className="localboard-folder__name">
+                            {item.name}
+                          </span>
+                          <span className="localboard-folder__count">
+                            {(boards[item.path] ?? []).length}
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          className="dropdown-menu-button localboard-button"
+                          title="Показать в Finder"
+                          aria-label="Показать в Finder"
+                          onClick={() =>
+                            void invoke("reveal_path", { path: item.path })
+                          }
+                        >
+                          {folderIcon}
+                        </button>
+                      </div>
+
+                      {!folded && list.length === 0 && (
+                        <p className="localboard-list__empty">
+                          {needle ? "Ничего не найдено" : "Пока нет досок"}
+                        </p>
                       )}
-                      aria-current={active}
-                      title={boardTitle(board)}
-                      onContextMenu={(event) => {
-                        event.preventDefault();
-                        void invoke("show_board_menu", { path: board.path });
-                      }}
-                      onClick={() => {
-                        if (!active) {
-                          void openBoard(board);
-                        }
-                        if (!docked) {
-                          api?.toggleSidebar({ name: null });
-                        }
-                      }}
-                    >
-                      {boardIcon}
-                      <span className="localboard-list__name">
-                        {boardTitle(board)}
-                      </span>
-                    </button>
+
+                      {!folded &&
+                        list.map((board) => {
+                          const active = current?.path === board.path;
+
+                          // Переименование прямо в строке списка, как в Finder:
+                          // имя правится там же, где читается.
+                          if (renaming?.path === board.path) {
+                            const value = renaming.value;
+                            return (
+                              <form
+                                key={board.path}
+                                className="localboard-rename"
+                                onSubmit={(event) => {
+                                  event.preventDefault();
+                                  void commitRename(board);
+                                }}
+                              >
+                                <input
+                                  autoFocus
+                                  className="localboard-input"
+                                  aria-label="Название доски"
+                                  value={value}
+                                  onChange={(event) =>
+                                    setRenaming({
+                                      path: board.path,
+                                      value: event.target.value,
+                                    })
+                                  }
+                                  onBlur={() => void commitRename(board)}
+                                  onKeyDown={(event) => {
+                                    if (event.key === "Escape") {
+                                      event.stopPropagation();
+                                      setRenaming(null);
+                                    }
+                                  }}
+                                />
+                              </form>
+                            );
+                          }
+
+                          return (
+                            <button
+                              type="button"
+                              key={board.path}
+                              className={cx(
+                                "localboard-list__item",
+                                active && "localboard-list__item--active"
+                              )}
+                              aria-current={active}
+                              title={boardTitle(board)}
+                              onContextMenu={(event) => {
+                                event.preventDefault();
+                                void invoke("show_board_menu", {
+                                  path: board.path,
+                                });
+                              }}
+                              onClick={() => {
+                                if (!active) {
+                                  void openBoard(board);
+                                }
+                                if (!docked) {
+                                  api?.toggleSidebar({ name: null });
+                                }
+                              }}
+                            >
+                              {boardIcon}
+                              <span className="localboard-list__name">
+                                {boardTitle(board)}
+                              </span>
+                            </button>
+                          );
+                        })}
+                    </section>
                   );
                 })}
               </div>
@@ -878,10 +1047,11 @@ export default function App() {
                 <button
                   type="button"
                   className="localboard-sidebar__folder"
-                  title={`Папка досок: ${folder}`}
-                  onClick={chooseFolder}
+                  title="Подключить папку с досками"
+                  onClick={addFolder}
                 >
-                  {folderTitle(folder)}
+                  {plusIcon}
+                  Подключить папку
                 </button>
               </footer>
             </div>

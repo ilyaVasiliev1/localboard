@@ -293,7 +293,9 @@ body {
 .excalidraw .localboard-sidebar__footer {
   display: flex;
   flex: 0 0 auto;
-  align-items: baseline;
+  /* По центру, а не по базовой линии: у кнопки со значком базовая линия своя,
+     и рядом со статусом она уезжала вниз. */
+  align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
   padding-top: 0.625rem;
@@ -517,4 +519,97 @@ body {
 
 .excalidraw .localboard-rename .localboard-input {
   width: 100%;
+}
+
+/* ----------------------------------------------------------------- папки --
+ * Доски лежат рядом с проектами, к которым относятся, поэтому папок в списке
+ * несколько. Секция ведёт себя как раздел: заголовок сворачивает содержимое,
+ * рядом — кнопка «показать в Finder», чтобы из списка можно было провалиться
+ * в саму папку.
+ */
+
+.excalidraw .localboard-folder {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.excalidraw .localboard-folder + .localboard-folder {
+  margin-top: 0.5rem;
+}
+
+.excalidraw .localboard-folder__header {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+/* Высота совпадает с кнопкой «показать в Finder» рядом: подсветка заголовка
+   и кнопка стоят в одной строке, и разная высота сразу читается как небрежность. */
+.excalidraw .localboard-folder__toggle {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 0.375rem;
+  min-width: 0;
+  height: var(--lg-button-size);
+  padding: 0 0.375rem;
+  border: 0;
+  border-radius: var(--border-radius-lg);
+  background-color: transparent;
+  color: var(--color-gray-60, #6b6b6b);
+  font-family: var(--ui-font);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-align: left;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.excalidraw .localboard-folder__toggle:hover {
+  background-color: var(--color-surface-mid);
+}
+
+.excalidraw .localboard-folder__chevron {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  transition: transform 0.12s ease;
+}
+
+.excalidraw .localboard-folder__chevron svg {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
+.excalidraw .localboard-folder__chevron--folded {
+  transform: rotate(-90deg);
+}
+
+.excalidraw .localboard-folder__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Число досок держит правый край: по нему видно наполнение свёрнутой папки. */
+.excalidraw .localboard-folder__count {
+  margin-left: auto;
+  padding-left: 0.5rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+  opacity: 0.7;
+}
+
+.excalidraw .localboard-sidebar__folder {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-left: auto;
+}
+
+.excalidraw .localboard-sidebar__folder svg {
+  width: 0.875rem;
+  height: 0.875rem;
 }

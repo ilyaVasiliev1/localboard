@@ -21,10 +21,34 @@ struct Board {
 }
 
 /// Persisted next to the app's other support files, not inside the project, so
-/// the chosen boards folder survives rebuilds and moving the sources around.
+/// the chosen boards folders survive rebuilds and moving the sources around.
 #[derive(Default, Serialize, Deserialize)]
 struct Config {
+    /// Подключённые папки досок. Их несколько, потому что доски живут рядом с
+    /// проектами, к которым относятся, а проектов у человека больше одного.
+    #[serde(default)]
+    folders: Vec<String>,
+    /// Прежняя единственная папка. Читается только ради переноса на список и
+    /// после первого сохранения из конфига исчезает.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     boards_dir: Option<String>,
+}
+
+#[derive(Serialize)]
+struct Folder {
+    path: String,
+    name: String,
+}
+
+fn folder(path: &Path) -> Folder {
+    Folder {
+        name: path
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string(),
+        path: path.to_string_lossy().to_string(),
+    }
 }
 
 fn board(path: &Path) -> Board {
@@ -87,30 +111,94 @@ fn migrate_legacy_boards(target: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn resolve_dir(app: &AppHandle) -> Result<PathBuf, String> {
+/// Готовит папку к работе: ящик схем и инструкция для ассистента появляются в
+/// КАЖДОЙ подключённой папке. Смысл всей затеи с несколькими папками в том и
+/// состоит, чтобы агент работал внутри проекта, а не бегал за досками наружу.
+fn prepare_folder(app: &AppHandle, directory: &Path) {
+    let _ = fs::create_dir_all(inbox_dir(directory));
+    write_agent_guide(app, directory);
+}
+
+/// Список папок с переносом со старой схемы: раньше папка была одна и лежала
+/// в `boards_dir`.
+fn folders_of(app: &AppHandle) -> Vec<PathBuf> {
     let config = read_config(app);
-    let dir = match config.boards_dir {
-        Some(dir) => {
-            let dir = PathBuf::from(dir);
-            fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-            dir
+    let mut list: Vec<PathBuf> = config.folders.iter().map(PathBuf::from).collect();
+
+    if list.is_empty() {
+        if let Some(legacy) = config.boards_dir {
+            list.push(PathBuf::from(legacy));
         }
-        None => {
-            let dir = default_dir(app);
-            let is_new = !dir.exists();
-            fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-            if is_new {
-                migrate_legacy_boards(&dir)?;
-            }
-            dir
+    }
+    if list.is_empty() {
+        let dir = default_dir(app);
+        let is_new = !dir.exists();
+        let _ = fs::create_dir_all(&dir);
+        if is_new {
+            let _ = migrate_legacy_boards(&dir);
         }
-    };
-    // Ящик существует всегда, а не создаётся первым же запросом: иначе
-    // внешнему инструменту пришлось бы знать, где именно у пользователя доски,
-    // и создавать каталог за приложение.
-    let _ = fs::create_dir_all(inbox_dir(&dir));
-    write_agent_guide(app, &dir);
-    Ok(dir)
+        list.push(dir);
+    }
+    list
+}
+
+fn save_folders(app: &AppHandle, list: &[PathBuf]) -> Result<(), String> {
+    write_config(
+        app,
+        &Config {
+            folders: list
+                .iter()
+                .map(|path| path.to_string_lossy().to_string())
+                .collect(),
+            boards_dir: None,
+        },
+    )
+}
+
+#[tauri::command]
+fn list_folders(app: AppHandle) -> Result<Vec<Folder>, String> {
+    // Папку могли переименовать или унести на отключённый диск — тогда она
+    // молча выпадает из списка, а не превращается в вечную ошибку.
+    let list: Vec<PathBuf> = folders_of(&app)
+        .into_iter()
+        .filter(|path| path.is_dir())
+        .collect();
+    save_folders(&app, &list)?;
+    for directory in &list {
+        prepare_folder(&app, directory);
+    }
+    Ok(list.iter().map(|path| folder(path)).collect())
+}
+
+#[tauri::command]
+fn add_folder(app: AppHandle, path: String) -> Result<Vec<Folder>, String> {
+    let directory = PathBuf::from(&path);
+    if !directory.is_dir() {
+        return Err("Такой папки нет".into());
+    }
+    let mut list = folders_of(&app);
+    if !list.iter().any(|existing| existing == &directory) {
+        list.push(directory);
+    }
+    save_folders(&app, &list)?;
+    for directory in &list {
+        prepare_folder(&app, directory);
+    }
+    Ok(list.iter().map(|path| folder(path)).collect())
+}
+
+/// Убирает папку из списка. Ни один файл при этом не трогается: папка
+/// «отключается», а не удаляется — иначе одно неверное движение стоило бы
+/// человеку всех досок проекта.
+#[tauri::command]
+fn remove_folder(app: AppHandle, path: String) -> Result<Vec<Folder>, String> {
+    let directory = PathBuf::from(&path);
+    let list: Vec<PathBuf> = folders_of(&app)
+        .into_iter()
+        .filter(|existing| existing != &directory)
+        .collect();
+    save_folders(&app, &list)?;
+    Ok(list.iter().map(|path| folder(path)).collect())
 }
 
 /// Ящик для схем: сюда внешний инструмент кладёт запрос на вставку, отсюда
@@ -122,7 +210,7 @@ fn inbox_dir(directory: &Path) -> PathBuf {
 
 /// Версия протокола в инструкции. Растёт, когда меняется формат запроса —
 /// по ней файл переписывается у тех, кто обновил приложение.
-const AGENT_PROTOCOL_VERSION: u32 = 2;
+const AGENT_PROTOCOL_VERSION: u32 = 3;
 
 fn board_cli_path(app: &AppHandle) -> String {
     app.path()
@@ -160,6 +248,10 @@ fn write_agent_guide(app: &AppHandle, directory: &Path) {
 В этой папке лежат доски приложения **LocalBoard** (macOS): каждая доска — файл
 `*.excalidraw`, обычный JSON формата Excalidraw. Ты можешь читать эти доски и
 класть на них схемы. Ниже — весь протокол.
+
+В приложении подключено несколько таких папок — по одной рядом с каждым
+проектом. Работай с досками **этой** папки: команды ниже сами выбирают её по
+текущему каталогу, и схема ляжет в доску этого проекта, а не соседнего.
 
 ## Прочитать доску
 
@@ -210,9 +302,10 @@ node "{cli}" send запрос.json
 
 ## Правила
 
-1. **Приложение должно быть запущено, и доска открыта.** Иначе запрос будет
-   отклонён: рядом с ним появится файл `.error.txt` с причиной — прочитай его,
-   если схема не появилась.
+1. **Приложение должно быть запущено, и доска из ЭТОЙ папки открыта.** Иначе
+   запрос будет отклонён: рядом с ним появится файл `.error.txt` с причиной —
+   прочитай его, если схема не появилась. Схему в доску чужого проекта
+   приложение не положит намеренно.
 2. **Схемы приходят чёрно-белыми, и это намеренно.** Цвет на доске означает
    смысл, и расставляет его владелец доски. Не добавляй цвета и заливки, пока
    тебя об этом не попросили прямо.
@@ -258,29 +351,6 @@ fn agent_setup(app: AppHandle, directory: String) -> Result<serde_json::Value, S
         "guide": Path::new(&directory).join("CLAUDE.md").to_string_lossy(),
         "cli": board_cli_path(&app),
     }))
-}
-
-#[tauri::command]
-fn get_board_directory(app: AppHandle) -> Result<String, String> {
-    Ok(resolve_dir(&app)?.to_string_lossy().to_string())
-}
-
-#[tauri::command]
-fn set_board_directory(app: AppHandle, directory: String) -> Result<String, String> {
-    let dir = PathBuf::from(&directory);
-    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    write_config(
-        &app,
-        &Config {
-            boards_dir: Some(dir.to_string_lossy().to_string()),
-        },
-    )?;
-    // Новая папка досок получает ту же оснастку, что и стартовая: ящик и
-    // инструкцию для ассистента. Иначе связка молча переставала работать
-    // ровно в тот момент, когда человек переносит доски в другое место.
-    let _ = fs::create_dir_all(inbox_dir(&dir));
-    write_agent_guide(&app, &dir);
-    Ok(dir.to_string_lossy().to_string())
 }
 
 #[tauri::command]
@@ -340,6 +410,26 @@ fn show_board_menu(app: AppHandle, window: tauri::Window, path: String) -> Resul
         .map_err(|e| e.to_string())?;
     let menu = MenuBuilder::new(&app)
         .items(&[&rename, &delete])
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    menu.popup(window).map_err(|e| e.to_string())
+}
+
+/// Меню папки. Пункт один, но системное меню здесь важнее списка пунктов:
+/// правый клик по строке обязан вести себя одинаково и на доске, и на папке.
+#[tauri::command]
+fn show_folder_menu(app: AppHandle, window: tauri::Window, path: String) -> Result<(), String> {
+    *app.state::<BoardMenuTarget>()
+        .0
+        .lock()
+        .map_err(|e| e.to_string())? = Some(path);
+
+    let remove = MenuItemBuilder::with_id("folder:remove", "Убрать папку из списка")
+        .build(&app)
+        .map_err(|e| e.to_string())?;
+    let menu = MenuBuilder::new(&app)
+        .items(&[&remove])
         .build()
         .map_err(|e| e.to_string())?;
 
@@ -494,9 +584,10 @@ fn main() {
     tauri::Builder::default()
         .manage(BoardMenuTarget::default())
         .on_menu_event(|app, event| {
-            let action = match event.id().0.as_str() {
-                "board:rename" => "rename",
-                "board:delete" => "delete",
+            let (topic, action) = match event.id().0.as_str() {
+                "board:rename" => ("board-menu", "rename"),
+                "board:delete" => ("board-menu", "delete"),
+                "folder:remove" => ("folder-menu", "remove"),
                 _ => return,
             };
             let target = app
@@ -506,7 +597,7 @@ fn main() {
                 .ok()
                 .and_then(|guard| guard.clone());
             if let Some(path) = target {
-                let _ = app.emit("board-menu", serde_json::json!({
+                let _ = app.emit(topic, serde_json::json!({
                     "action": action,
                     "path": path,
                 }));
@@ -524,8 +615,9 @@ fn main() {
         }))
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
-            get_board_directory,
-            set_board_directory,
+            list_folders,
+            add_folder,
+            remove_folder,
             list_boards,
             create_board,
             read_board,
@@ -533,6 +625,7 @@ fn main() {
             delete_board,
             rename_board,
             show_board_menu,
+            show_folder_menu,
             take_scheme_request,
             finish_scheme_request,
             reveal_path,

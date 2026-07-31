@@ -26,16 +26,41 @@ const CONFIG = path.join(
 const FALLBACK_DIR = path.join(homedir(), "Documents/LocalBoard");
 const EXT = ".excalidraw";
 
-const boardsDir = async () => {
+/** Подключённые папки, в порядке приложения; `boards_dir` — прежняя одиночная. */
+const allFolders = async () => {
   try {
     const config = JSON.parse(await readFile(CONFIG, "utf8"));
-    if (config.boards_dir && existsSync(config.boards_dir)) {
-      return config.boards_dir;
+    const list = [...(config.folders ?? []), config.boards_dir].filter(
+      (dir) => dir && existsSync(dir),
+    );
+    if (list.length > 0) {
+      return list;
     }
   } catch {
-    // Конфига нет ровно до первой смены папки в приложении — это норма.
+    // Конфига нет до первого запуска приложения — это норма.
   }
-  return FALLBACK_DIR;
+  return existsSync(FALLBACK_DIR) ? [FALLBACK_DIR] : [];
+};
+
+/**
+ * Папка «своего» проекта — та, внутри которой запущен ассистент.
+ *
+ * В этом вся суть подключаемых папок: доски лежат рядом с проектом, и агент,
+ * открытый в проекте, должен работать с его досками, а не с чужими. Если
+ * текущий каталог ни к одной не относится — берём первую подключённую.
+ */
+const currentFolder = async () => {
+  const folders = await allFolders();
+  if (folders.length === 0) {
+    throw new Error(
+      "Нет подключённых папок. Подключите папку в приложении LocalBoard.",
+    );
+  }
+  const cwd = process.cwd();
+  return (
+    folders.find((dir) => cwd === dir || cwd.startsWith(`${dir}/`)) ??
+    folders[0]
+  );
 };
 
 const listBoards = async (dir) =>
@@ -43,19 +68,27 @@ const listBoards = async (dir) =>
     .filter((name) => name.endsWith(EXT))
     .sort((a, b) => a.localeCompare(b, "ru"));
 
-/** Доска по точному имени, а иначе по вхождению — руками имена не набирают. */
-const resolveBoard = async (dir, query) => {
-  const boards = await listBoards(dir);
+/**
+ * Доска ищется во всех подключённых папках, но своя — первой: одинаковые имена
+ * («Архитектура») в разных проектах это норма, и брать чужую нельзя.
+ */
+const resolveBoard = async (query) => {
+  const home = await currentFolder();
+  const folders = [home, ...(await allFolders()).filter((dir) => dir !== home)];
   const needle = query.toLowerCase().replace(EXT, "");
-  const match =
-    boards.find((name) => name.replace(EXT, "").toLowerCase() === needle) ??
-    boards.find((name) => name.toLowerCase().includes(needle));
-  if (!match) {
-    throw new Error(
-      `Доска «${query}» не найдена. Есть: ${boards.map((n) => n.replace(EXT, "")).join(", ")}`,
-    );
+
+  const known = [];
+  for (const dir of folders) {
+    const boards = await listBoards(dir);
+    boards.forEach((name) => known.push(path.basename(name, EXT)));
+    const match =
+      boards.find((name) => name.replace(EXT, "").toLowerCase() === needle) ??
+      boards.find((name) => name.toLowerCase().includes(needle));
+    if (match) {
+      return path.join(dir, match);
+    }
   }
-  return path.join(dir, match);
+  throw new Error(`Доска «${query}» не найдена. Есть: ${known.join(", ")}`);
 };
 
 const SHAPES = {
@@ -165,8 +198,7 @@ const labelOf = (element, byId) => {
 };
 
 const readCommand = async (query) => {
-  const dir = await boardsDir();
-  const file = await resolveBoard(dir, query);
+  const file = await resolveBoard(query);
   const scene = JSON.parse(await readFile(file, "utf8"));
   const elements = (scene.elements ?? []).filter((element) => !element.isDeleted);
   const byId = new Map(elements.map((element) => [element.id, element]));
@@ -225,13 +257,19 @@ const readCommand = async (query) => {
 };
 
 const listCommand = async () => {
-  const dir = await boardsDir();
-  const boards = await listBoards(dir);
-  console.log(`Папка досок: ${dir}\n`);
-  for (const name of boards) {
-    const scene = JSON.parse(await readFile(path.join(dir, name), "utf8"));
-    const count = (scene.elements ?? []).filter((el) => !el.isDeleted).length;
-    console.log(`  ${name.replace(EXT, "")} — ${count} элементов`);
+  const home = await currentFolder();
+  for (const dir of await allFolders()) {
+    console.log(`${dir}${dir === home ? "   ← текущий проект" : ""}`);
+    const boards = await listBoards(dir);
+    if (boards.length === 0) {
+      console.log("  (пусто)");
+    }
+    for (const name of boards) {
+      const scene = JSON.parse(await readFile(path.join(dir, name), "utf8"));
+      const count = (scene.elements ?? []).filter((el) => !el.isDeleted).length;
+      console.log(`  ${name.replace(EXT, "")} — ${count} элементов`);
+    }
+    console.log("");
   }
 };
 
@@ -241,7 +279,7 @@ const flag = (argv, name) => {
 };
 
 const sendCommand = async (argv) => {
-  const dir = await boardsDir();
+  const dir = await currentFolder();
   const inbox = path.join(dir, "_inbox");
   await mkdir(inbox, { recursive: true });
 
@@ -272,7 +310,10 @@ const sendCommand = async (argv) => {
   await rename(staging, target);
 
   console.log(`Запрос положен: ${target}`);
-  console.log("Приложение подхватит его в течение полутора секунд.");
+  console.log(
+    `Папка проекта: ${dir}\nПриложение подхватит запрос в течение полутора секунд —` +
+      " в этой папке должна быть открыта доска.",
+  );
 };
 
 const [command, ...rest] = process.argv.slice(2);
