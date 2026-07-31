@@ -625,12 +625,31 @@ body {
   font-weight: 600;
 }
 
-/* Раздел, над которым висит перетаскиваемая доска. Подсветка рамкой, а не
-   заливкой: заливка спорит с выделением активной доски внутри раздела. */
+/*
+ * Перенос доски между папками.
+ *
+ * Пока доску тащат, каждая чужая папка помечается как возможная цель, и только
+ * та, над которой курсор, подсвечивается ярко. Без первого состояния человек
+ * тянет вслепую: непонятно даже, поддерживается перенос или нет.
+ * Подсветка рамкой, а не заливкой — заливка спорит с выделением активной доски.
+ */
+.excalidraw .localboard-folder--target {
+  border-radius: var(--border-radius-lg);
+  outline: 1px dashed var(--color-gray-40, #b8b8b8);
+  outline-offset: -1px;
+}
+
 .excalidraw .localboard-folder--drop {
   border-radius: var(--border-radius-lg);
-  outline: 2px dashed var(--color-primary);
-  outline-offset: 2px;
+  outline: 2px solid var(--color-primary);
+  outline-offset: -1px;
+  background-color: var(--color-surface-mid);
+}
+
+/* Сама доска под курсором во время переноса — приглушена, чтобы было видно,
+   что именно «взяли». */
+.excalidraw .localboard-list__item:active {
+  opacity: 0.7;
 }
 
 .excalidraw .localboard-list__item[draggable="true"] {

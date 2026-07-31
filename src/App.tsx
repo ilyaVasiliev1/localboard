@@ -81,7 +81,7 @@ const sceneSignature = (elements: any[], appState: any) =>
 const withExtension = (name: string) =>
   name.endsWith(EXT) ? name : `${name}${EXT}`;
 
-const cx = (...classNames: (string | false | undefined)[]) =>
+const cx = (...classNames: (string | false | null | undefined)[]) =>
   classNames.filter(Boolean).join(" ");
 
 /** Cosmetic — never let a failed title update look like a failed open. */
@@ -132,6 +132,8 @@ export default function App() {
   const [newBoardName, setNewBoardName] = useState("Новая доска");
   const [newBoardError, setNewBoardError] = useState("");
   const [dragOver, setDragOver] = useState<string | null>(null);
+  /** Папка, из которой тащат доску: пока тащим, остальные подсвечиваются как цели. */
+  const [dragging, setDragging] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
   const [agentSetup, setAgentSetup] = useState<AgentSetup | null>(null);
   const [agentTheme, setAgentTheme] = useState("light");
@@ -230,6 +232,51 @@ export default function App() {
     }, 0);
   }, [api]);
 
+  /**
+   * Сверка с диском. Файлы живут своей жизнью: доску могли перенести, удалить
+   * или добавить в Finder, и список в панели обязан это замечать сам — иначе он
+   * показывает то, чего уже нет, и открытие такой доски даёт ошибку на пустом
+   * месте. Состояние обновляется только при реальном отличии, чтобы сверка не
+   * перерисовывала панель каждые несколько секунд.
+   */
+  const syncBoards = useCallback(async () => {
+    const list = await invoke<Folder[]>("list_folders");
+    setFolders((previous) =>
+      JSON.stringify(previous) === JSON.stringify(list) ? previous : list,
+    );
+    const pairs = await Promise.all(
+      list.map(async (item) => {
+        try {
+          return [
+            item.path,
+            await invoke<Board[]>("list_boards", { directory: item.path }),
+          ] as const;
+        } catch {
+          return [item.path, [] as Board[]] as const;
+        }
+      }),
+    );
+    const next = Object.fromEntries(pairs);
+    setBoards((previous) =>
+      JSON.stringify(previous) === JSON.stringify(next) ? previous : next,
+    );
+
+    // Открытая доска могла исчезнуть из-под приложения. Держать её на экране
+    // нельзя: автосохранение воссоздало бы файл там, откуда его убрали.
+    const open = currentRef.current;
+    if (open && !Object.values(next).flat().some((b) => b.path === open.path)) {
+      window.clearTimeout(saveTimer.current);
+      saveTimer.current = undefined;
+      clearCanvas();
+      setCurrent(null);
+      setStatus("Готово");
+      localStorage.removeItem(LAST_BOARD_KEY);
+      setWindowTitle("LocalBoard");
+      toast(`Доска «${boardTitle(open)}» больше не лежит в этой папке`);
+    }
+    return next;
+  }, [clearCanvas, toast]);
+
   /** Writes out a pending debounced save before we move away from a board. */
   const flushPendingSave = useCallback(async () => {
     if (saveTimer.current === undefined) {
@@ -282,6 +329,9 @@ export default function App() {
         setWindowTitle(`LocalBoard — ${boardTitle(board)}`);
       } catch (error) {
         toast(`Не удалось открыть доску: ${error}`);
+        // Чаще всего это значит, что файла уже нет: сверяемся с диском, чтобы
+        // исчезнувшая доска пропала из списка, а не висела в нём.
+        void syncBoards().catch(() => undefined);
       } finally {
         // `updateScene` reaches `onChange` asynchronously.
         window.setTimeout(() => {
@@ -289,7 +339,7 @@ export default function App() {
         }, 0);
       }
     },
-    [api, flushPendingSave, toast]
+    [api, flushPendingSave, syncBoards, toast]
   );
 
   const onChange = useCallback(
@@ -666,6 +716,24 @@ export default function App() {
   }, [api, folders, toast]);
 
   /**
+   * Сверка с диском: при возвращении в окно — сразу (человек только что мог
+   * что-то сделать в Finder), и раз в несколько секунд на случай, когда окно
+   * всё время на виду.
+   */
+  useEffect(() => {
+    if (folders.length === 0) {
+      return;
+    }
+    const sync = () => void syncBoards().catch(() => undefined);
+    const timer = window.setInterval(sync, 4000);
+    window.addEventListener("focus", sync);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", sync);
+    };
+  }, [folders.length, syncBoards]);
+
+  /**
    * Нативное меню WKWebView («Обновить», «Назад») к рисованию отношения не
    * имеет и появляется поверх наших собственных меню. В полях ввода его
    * оставляем — там оно даёт копирование и вставку.
@@ -914,7 +982,15 @@ export default function App() {
                     <section
                       className={cx(
                         "localboard-folder",
-                        dragOver === item.path && "localboard-folder--drop",
+                        // Пока доску тащат, каждая ЧУЖАЯ папка показывает, что
+                        // готова её принять: без этого человек тянет вслепую и
+                        // не понимает, работает ли перенос вообще.
+                        dragging &&
+                          dragging !== item.path &&
+                          "localboard-folder--target",
+                        dragOver === item.path &&
+                          dragging !== item.path &&
+                          "localboard-folder--drop",
                       )}
                       key={item.path}
                       onDragOver={(event) => {
@@ -930,6 +1006,7 @@ export default function App() {
                       }
                       onDrop={(event) => {
                         event.preventDefault();
+                        setDragging(null);
                         const path = event.dataTransfer.getData("text/plain");
                         const board = Object.values(boards)
                           .flat()
@@ -1115,8 +1192,12 @@ export default function App() {
                                   board.path,
                                 );
                                 event.dataTransfer.effectAllowed = "move";
+                                setDragging(item.path);
                               }}
-                              onDragEnd={() => setDragOver(null)}
+                              onDragEnd={() => {
+                                setDragging(null);
+                                setDragOver(null);
+                              }}
                               onContextMenu={(event) => {
                                 event.preventDefault();
                                 void invoke("show_board_menu", {
