@@ -793,7 +793,17 @@ export default function App() {
             </MainMenu.Item>
             <MainMenu.Item
               icon={downloadIcon}
-              onSelect={() => void checkForUpdates((message) => toast(message))}
+              onSelect={() =>
+                void checkForUpdates((message, sticky) =>
+                  api?.setToast({
+                    message,
+                    closable: true,
+                    // Проверка идёт десятки секунд; обычная плашка гаснет за
+                    // пять и оставляет человека в тишине.
+                    duration: sticky ? Infinity : undefined,
+                  }),
+                )
+              }
               aria-label="Проверить обновления"
             >
               Проверить обновления…

@@ -15,7 +15,18 @@ import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { ask } from "@tauri-apps/plugin-dialog";
 
-type Report = (message: string) => void;
+/**
+ * `sticky` — сообщение висит, пока его не сменит следующее.
+ *
+ * Обычная плашка редактора гаснет через пять секунд, а ответ GitHub идёт
+ * заметно дольше — из Китая счёт шёл на десятки секунд. Получалось худшее из
+ * возможного: человек нажимает, плашка гаснет, и дальше тишина, по которой
+ * невозможно отличить «идёт проверка» от «ничего не произошло».
+ */
+type Report = (message: string, sticky?: boolean) => void;
+
+/** Столько ждём GitHub, прежде чем сказать, что он не отвечает. */
+const CHECK_TIMEOUT_MS = 45_000;
 
 /** Сетевую ошибку человеку нужно объяснить одной фразой, а не стектрейсом. */
 const isOffline = (error: unknown) => {
@@ -31,16 +42,19 @@ const isOffline = (error: unknown) => {
 };
 
 export const checkForUpdates = async (report: Report) => {
-  report("Проверяю обновления…");
+  report("Проверяю обновления…", true);
 
   let update;
   try {
-    update = await check();
+    update = await check({ timeout: CHECK_TIMEOUT_MS });
   } catch (error) {
+    const text = String(error).toLowerCase();
     report(
-      isOffline(error)
-        ? "Нет соединения с интернетом — проверить обновления не получилось"
-        : `Не удалось проверить обновления: ${error}`,
+      text.includes("timed out") || text.includes("timeout")
+        ? "GitHub не ответил за 45 секунд — попробуйте позже"
+        : isOffline(error)
+          ? "Нет соединения с интернетом — проверить обновления не получилось"
+          : `Не удалось проверить обновления: ${error}`,
     );
     return;
   }
@@ -66,14 +80,17 @@ export const checkForUpdates = async (report: Report) => {
       // человеку ни о чём не говорит, а ожидание без отклика выглядит зависанием.
       if (event.event === "Started") {
         total = event.data.contentLength ?? 0;
-        report("Загружаю обновление…");
+        report("Загружаю обновление…", true);
       } else if (event.event === "Progress") {
         received += event.data.chunkLength;
         if (total > 0) {
-          report(`Загружаю обновление… ${Math.round((received / total) * 100)}%`);
+          report(
+            `Загружаю обновление… ${Math.round((received / total) * 100)}%`,
+            true,
+          );
         }
       } else if (event.event === "Finished") {
-        report("Устанавливаю…");
+        report("Устанавливаю…", true);
       }
     });
     await relaunch();
