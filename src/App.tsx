@@ -1204,12 +1204,13 @@ export default function App() {
                                   path: board.path,
                                 });
                               }}
+                              // Панель закрывается только крестиком: выбор
+                              // доски — часть поиска нужной, и закрывать список
+                              // после каждого клика значит заставлять открывать
+                              // его заново.
                               onClick={() => {
                                 if (!active) {
                                   void openBoard(board);
-                                }
-                                if (!docked) {
-                                  api?.toggleSidebar({ name: null });
                                 }
                               }}
                             >
