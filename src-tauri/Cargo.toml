@@ -1,6 +1,6 @@
 [package]
 name = "localboard"
-version = "0.2.2"
+version = "0.2.3"
 edition = "2021"
 
 [build-dependencies]
@@ -15,7 +15,15 @@ tauri-plugin-single-instance = "2"
 # Обновление по явному нажатию. Живёт в Rust, поэтому запрет сети в самом
 # интерфейсе (`connect-src 'none'`) остаётся в силе: веб-часть по-прежнему не
 # может обратиться наружу.
-tauri-plugin-updater = "2"
+# native-tls, а не встроенный rustls: rustls везёт собственный список доверенных
+# корней и не заглядывает в связку ключей macOS. На машине с VPN, который
+# подменяет сертификаты (обычное дело в Китае), запрос к GitHub падал с «error
+# sending request», хотя curl из терминала проходил — он доверяет системным
+# корням, где сертификат VPN уже есть.
+tauri-plugin-updater = { version = "2", default-features = false, features = [
+    "native-tls",
+    "zip",
+] }
 tauri-plugin-process = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
