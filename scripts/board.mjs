@@ -188,6 +188,37 @@ const attachTitles = (clusters) => {
   };
 };
 
+/**
+ * Вид элемента словами.
+ *
+ * Без этого пересказ описывает только смысл схемы, и дорисовать в чужую доску
+ * что-то, не выбивающееся из неё, невозможно: не видно ни цветов, ни толщин, ни
+ * шрифта. Значения печатаются как есть — они же потом и снимаются с донора.
+ */
+const lookOf = (element) => {
+  const parts = [];
+  if (element.backgroundColor && element.backgroundColor !== "transparent") {
+    parts.push(`заливка ${element.backgroundColor}`);
+  }
+  parts.push(`обводка ${element.strokeColor} ${element.strokeWidth}px`);
+  if (element.strokeStyle && element.strokeStyle !== "solid") {
+    parts.push(element.strokeStyle === "dashed" ? "пунктир" : "точки");
+  }
+  if (element.roundness) {
+    parts.push("скруглён");
+  }
+  if (element.elbowed) {
+    parts.push("прямые углы");
+  }
+  if (element.opacity !== undefined && element.opacity !== 100) {
+    parts.push(`прозрачность ${100 - element.opacity}%`);
+  }
+  return parts.join(", ");
+};
+
+const geometryOf = (element) =>
+  `${Math.round(element.width)}x${Math.round(element.height)} @ ${Math.round(element.x)},${Math.round(element.y)}`;
+
 const labelOf = (element, byId) => {
   if (typeof element.text === "string" && element.text.trim()) {
     return element.text.trim();
@@ -226,9 +257,14 @@ const readCommand = async (query) => {
       `   узлы (${nodes.length}):`,
     );
     for (const node of nodes) {
-      const label = labelOf(node, byId) || "(без подписи)";
+      const label = (labelOf(node, byId) || "(без подписи)").replace(/\s+/g, " ");
+      const text = byId.get(
+        (node.boundElements ?? []).find((item) => item?.type === "text")?.id,
+      );
       lines.push(
-        `     ${names.get(node.id)} [${SHAPES[node.type] ?? node.type}] ${label}`,
+        `     ${names.get(node.id)} ${node.id} [${SHAPES[node.type] ?? node.type}] ${label}`,
+        `        ${geometryOf(node)} · ${lookOf(node)}` +
+          (text ? ` · шрифт ${text.fontFamily}/${text.fontSize}` : ""),
       );
     }
     if (arrows.length > 0) {
@@ -239,7 +275,9 @@ const readCommand = async (query) => {
         const label = labelOf(arrow, byId);
         const left = from ? (names.get(from) ?? "?") : "·";
         const right = to ? (names.get(to) ?? "?") : "·";
-        lines.push(`     ${left} ${label ? `--${label}-->` : "→"} ${right}`);
+        lines.push(
+          `     ${left} ${label ? `--${label}-->` : "→"} ${right}   ${arrow.id} · ${lookOf(arrow)}`,
+        );
       }
     }
     lines.push("");
@@ -285,7 +323,12 @@ const sendCommand = async (argv) => {
 
   let request;
   const mermaidFile = flag(argv, "mermaid");
-  if (mermaidFile) {
+  const opsInline = flag(argv, "ops");
+  if (opsInline) {
+    // Правки короткие — гонять их через временный файл значит плодить мусор
+    // ради двух строк JSON.
+    request = { ops: JSON.parse(opsInline) };
+  } else if (mermaidFile) {
     request = {
       mermaid: await readFile(mermaidFile, "utf8"),
       title: flag(argv, "title"),
@@ -299,6 +342,13 @@ const sendCommand = async (argv) => {
     request = JSON.parse(await readFile(argv[0], "utf8"));
   } else {
     throw new Error("Нужен файл запроса или --mermaid <файл.mmd>");
+  }
+
+  // Доска указывается явно — иначе схема ложится туда, где человек работает
+  // прямо сейчас, а работает он обычно над другим.
+  const board = flag(argv, "board");
+  if (board) {
+    request.board = board;
   }
 
   // Запись через переименование: приложение опрашивает ящик каждые полторы
@@ -332,6 +382,13 @@ try {
         "  read <имя доски>          — пересказ доски: схемы, узлы, связи",
         "  send <файл.json>          — положить запрос в ящик",
         "  send --mermaid <файл.mmd> [--title T] [--anchor «текст»] [--place right|below] [--gap 200]",
+        "  send --ops '<json>'       — правки существующей схемы по id из read",
+        "  ... --board «Имя доски»   — ждать, пока откроют именно её",
+        "",
+        "Операции: label · style · move · delete · connect · insert",
+        '  {"op":"label","id":"…","text":"…"}',
+        '  {"op":"style","id":"…","from":"<id образца>"}',
+        '  {"op":"insert","between":["<id>","<id>"],"text":"…","like":"<id образца>"}',
       ].join("\n"),
     );
     process.exit(command ? 1 : 0);

@@ -12,7 +12,16 @@
  * правок (Cmd+Z отменяет её целиком) и уезжает в файл штатным автосохранением.
  */
 import { CaptureUpdateAction, convertToExcalidrawElements } from "@excalidraw/excalidraw";
+import {
+  Scene,
+  bindBindingElement,
+  bindBindingElementToFixedPoint,
+  redrawTextBoundingBox,
+  updateElbowArrowPoints,
+} from "@excalidraw/element";
 
+import { applySchemeOps, between, type SchemeOp } from "./scheme-ops";
+import { directionOf, layoutScheme } from "./scheme-layout";
 import {
   DEFAULT_SCHEME_STYLE,
   roleForShape,
@@ -41,6 +50,12 @@ export type SchemeRequest = {
   roles?: Record<string, SchemeRole>;
   /** Точечные правки визуального канона под конкретный запрос. */
   style?: Partial<SchemeStyle>;
+  /**
+   * Правки уже нарисованной схемы. Взаимоисключающи с `mermaid`/`elements`:
+   * там схема рождается по канону, здесь — дорабатывается в том виде, который
+   * ей придал человек.
+   */
+  ops?: SchemeOp[];
 };
 
 type Bounds = { minX: number; minY: number; maxX: number; maxY: number };
@@ -153,38 +168,6 @@ const viewportCentre = (api: ExcalidrawImperativeAPI): { x: number; y: number } 
   };
 };
 
-/**
- * Форма связей по форме схемы.
- *
- * Пока поток линейный, прямая линия — самое честное: она показывает «отсюда
- * сюда» и ничего не добавляет. Как только появляется развилка или слияние,
- * прямые начинают резать схему наискось и пересекаться между собой; прямые
- * углы в этом случае раскладываются по сетке и читаются с одного взгляда.
- */
-const chooseArrowShape = (skeletons: readonly any[]): "sharp" | "elbow" => {
-  const outgoing = new Map<string, number>();
-  const incoming = new Map<string, number>();
-
-  for (const skeleton of skeletons) {
-    if (skeleton.type !== "arrow") {
-      continue;
-    }
-    const from = skeleton.start?.id;
-    const to = skeleton.end?.id;
-    if (from) {
-      outgoing.set(from, (outgoing.get(from) ?? 0) + 1);
-    }
-    if (to) {
-      incoming.set(to, (incoming.get(to) ?? 0) + 1);
-    }
-  }
-
-  const branches =
-    [...outgoing.values()].some((count) => count > 1) ||
-    [...incoming.values()].some((count) => count > 1);
-  return branches ? "elbow" : "sharp";
-};
-
 const styleSkeletons = (
   skeletons: readonly any[],
   style: SchemeStyle,
@@ -194,7 +177,6 @@ const styleSkeletons = (
     needle: text.trim().toLowerCase(),
     role,
   }));
-
   return skeletons.map((skeleton) => {
     if (skeleton.type === "arrow" || skeleton.type === "line") {
       return {
@@ -202,11 +184,7 @@ const styleSkeletons = (
         strokeColor: style.arrow.strokeColor,
         strokeWidth: style.arrow.strokeWidth,
         roughness: style.roughness,
-        // Оба варианта — без сглаживания; `elbowed` дополнительно заставляет
-        // редактор вести связь только прямыми углами и пересчитывать её при
-        // перетаскивании блоков.
         roundness: null,
-        elbowed: style.arrow.shape === "elbow",
         ...(style.fontFamily && skeleton.label
           ? { label: { ...skeleton.label, fontFamily: style.fontFamily } }
           : {}),
@@ -249,6 +227,136 @@ const styleSkeletons = (
   });
 };
 
+/**
+ * Раскладка и маршруты от ELK, привязки — от редактора.
+ *
+ * Маршрут связи задаётся точками, которые посчитал ELK: они обходят блоки,
+ * разведены по коридорам и не сливаются с чужими. Редактору остаётся держать
+ * концы приклеенными к блокам — поэтому привязка ставится точкой, а не
+ * магнитом: магнит утащил бы конец на середину ближайшей грани и порушил
+ * рассчитанный маршрут.
+ */
+type Laid = { skeletons: any[]; bindings: Map<string, [string, string]> };
+
+const applyLayout = async (
+  skeletons: readonly any[],
+  direction: string,
+): Promise<Laid> => {
+  const bindings = new Map<string, [string, string]>();
+  const routed = await layoutScheme(skeletons, direction);
+  if (!routed) {
+    return { skeletons: skeletons as any[], bindings };
+  }
+
+  // Идентификаторы mermaid — это буквы из описания: `A`, `B`, `C`. В каждой
+  // схеме он начинает заново, поэтому две схемы на одной доске столкнулись бы
+  // адресами. Приставка разводит их, оставаясь при этом стабильной внутри
+  // одной схемы — на неё же ссылаются связи.
+  const stamp = Math.random().toString(36).slice(2, 8);
+  const uniq = (id: string) => `${stamp}-${id}`;
+
+  const out: any[] = [];
+  let edge = 0;
+  for (const original of skeletons) {
+    const skeleton = original.id
+      ? { ...original, id: uniq(original.id) }
+      : original;
+    if (skeleton.type !== "arrow" && skeleton.type !== "line") {
+      const box = routed.nodes.get(original.id);
+      out.push(box ? { ...skeleton, x: box.x, y: box.y } : skeleton);
+      continue;
+    }
+    if (!skeleton.start?.id || !skeleton.end?.id) {
+      out.push(skeleton);
+      continue;
+    }
+    const route = routed.edges.get(`e${edge++}`);
+    if (!route || route.points.length < 2) {
+      out.push(skeleton);
+      continue;
+    }
+    const [head] = route.points;
+    out.push({
+      ...skeleton,
+      // Маршрут уже ортогональный, изломы стоят там, где их посчитали, —
+      // собственный маршрутизатор редактора здесь только всё испортит.
+      elbowed: false,
+      roundness: null,
+      x: head[0],
+      y: head[1],
+      points: route.points.map(([x, y]) => [x - head[0], y - head[1]]),
+    });
+    bindings.set(skeleton.id, [uniq(skeleton.start.id), uniq(skeleton.end.id)]);
+  }
+  return { skeletons: out, bindings };
+};
+
+/**
+ * Возврат разорванных слов.
+ *
+ * Ширину блока mermaid считает по тексту, но для ромба берёт габарит, а текст
+ * живёт во вписанном ромбе — вдвое уже. Одно длинное слово в него не влезает и
+ * рвётся посередине: «Здор / ов?». Читается это как опечатка, поэтому ромб
+ * расширяется, пока слово не встанет целиком.
+ */
+const unwrapLabels = (elements: readonly any[]): any[] => {
+  const scene = new Scene(structuredClone(elements) as any);
+  const map = scene.getNonDeletedElementsMap();
+
+  for (const element of scene.getNonDeletedElements() as any[]) {
+    if (
+      element.type !== "text" ||
+      !element.containerId ||
+      /\s/.test(element.originalText ?? element.text ?? "")
+    ) {
+      continue;
+    }
+    const container = map.get(element.containerId) as any;
+    if (!container || container.type !== "diamond") {
+      continue;
+    }
+    const limit = container.width * 1.5;
+    while (element.text.includes("\n") && container.width < limit) {
+      scene.mutateElement(container, {
+        x: container.x - container.width * 0.075,
+        width: container.width * 1.15,
+      });
+      redrawTextBoundingBox(element, container, scene);
+    }
+  }
+  return scene.getElementsIncludingDeleted() as any[];
+};
+
+/** Приклеивает концы связей к блокам, не сдвигая рассчитанный маршрут. */
+const bindRoutes = (
+  elements: readonly any[],
+  bindings: Map<string, [string, string]>,
+): any[] => {
+  const scene = new Scene(structuredClone(elements) as any);
+  const map = scene.getNonDeletedElementsMap();
+
+  for (const element of scene.getNonDeletedElements() as any[]) {
+    const pair = element.type === "arrow" && bindings.get(element.id);
+    if (!pair) {
+      continue;
+    }
+    const from = map.get(pair[0]) as any;
+    const to = map.get(pair[1]) as any;
+    if (!from || !to) {
+      continue;
+    }
+    const at = (node: any, point: [number, number]) =>
+      [
+        (element.x + point[0] - node.x) / node.width,
+        (element.y + point[1] - node.y) / node.height,
+      ] as [number, number];
+    const last = element.points[element.points.length - 1];
+    bindBindingElementToFixedPoint(element, from, "start", at(from, element.points[0]), scene);
+    bindBindingElementToFixedPoint(element, to, "end", at(to, last), scene);
+  }
+  return scene.getElementsIncludingDeleted() as any[];
+};
+
 const shift = (skeletons: readonly any[], dx: number, dy: number): any[] =>
   skeletons.map((skeleton) => ({
     ...skeleton,
@@ -263,8 +371,8 @@ const parseRequest = (raw: string): SchemeRequest => {
   } catch (error) {
     throw new Error(`Запрос не разбирается как JSON: ${error}`);
   }
-  if (!request.mermaid && !Array.isArray(request.elements)) {
-    throw new Error("В запросе нет ни «mermaid», ни «elements»");
+  if (!request.mermaid && !Array.isArray(request.elements) && !request.ops) {
+    throw new Error("В запросе нет ни «mermaid», ни «elements», ни «ops»");
   }
   return request;
 };
@@ -276,8 +384,16 @@ const parseRequest = (raw: string): SchemeRequest => {
 export const applySchemeRequest = async (
   api: ExcalidrawImperativeAPI,
   raw: string,
-): Promise<{ count: number; title?: string }> => {
+): Promise<{ count: number; title?: string; edited?: boolean }> => {
   const request = parseRequest(raw);
+
+  // Правка существующей схемы не проходит ни через mermaid, ни через канон:
+  // раскладку и вид ей уже задал человек, и трогать их нельзя.
+  if (request.ops) {
+    const done = applySchemeOps(api, request.ops);
+    return { count: done.length, title: request.title, edited: true };
+  }
+
   const style: SchemeStyle = {
     ...DEFAULT_SCHEME_STYLE,
     ...request.style,
@@ -305,19 +421,13 @@ export const applySchemeRequest = async (
     throw new Error("Схема пустая: mermaid не дал ни одного элемента");
   }
 
-  // Форма связей решается после разбора mermaid: до него неизвестно, есть ли
-  // в схеме ветвления.
-  const resolved: SchemeStyle = {
-    ...style,
-    arrow: {
-      ...style.arrow,
-      shape:
-        style.arrow.shape === "auto"
-          ? chooseArrowShape(skeletons)
-          : style.arrow.shape,
-    },
-  };
-  skeletons = styleSkeletons(skeletons, resolved, request.roles);
+  // Форма связей решается после разбора mermaid: до него неизвестно, где
+  // окажутся блоки, а именно от этого зависит, есть ли связи что обходить.
+  const laid = await applyLayout(
+    styleSkeletons(skeletons, style, request.roles),
+    directionOf(request.mermaid ?? ""),
+  );
+  skeletons = laid.skeletons;
 
   const existing = api.getSceneElements();
   const gap = request.gap ?? 200;
@@ -360,7 +470,12 @@ export const applySchemeRequest = async (
     });
   }
 
-  const converted = convertToExcalidrawElements(placed as any);
+  const converted = bindRoutes(
+    unwrapLabels(
+      convertToExcalidrawElements(placed as any, { regenerateIds: false }),
+    ),
+    laid.bindings,
+  );
   if (files) {
     const list = Object.values(files);
     if (list.length > 0) {

@@ -643,6 +643,19 @@ export default function App() {
     let busy = false;
 
     const handle = async (directory: string) => {
+      // Схема живёт в файле доски, поэтому без открытой доски её некуда
+      // положить. И класть её в доску ЧУЖОГО проекта тоже нельзя: запрос
+      // пришёл из конкретной папки, и ответ должен остаться в ней.
+      //
+      // Проверка стоит ДО забора из ящика намеренно. Оба условия временные:
+      // доску вот-вот откроют, и запрос станет применимым. Забрать его сейчас
+      // значит превратить «ещё рано» в «уже никогда» — запрос исчезает, вместо
+      // схемы остаётся файл с ошибкой, и второй попытки не будет.
+      const board = currentRef.current;
+      if (!board || !board.path.startsWith(`${directory}/`)) {
+        return;
+      }
+
       const request = await invoke<{ name: string; content: string } | null>(
         "take_scheme_request",
         { directory }
@@ -650,28 +663,36 @@ export default function App() {
       if (!request || cancelled) {
         return;
       }
+
+      // Запрос вправе назвать свою доску. Без этого схема ложится туда, где
+      // человек сейчас работает, — а он работает не над ней. Имя не совпало —
+      // запрос остаётся в ящике и дожидается, когда нужную доску откроют.
       try {
-        const board = currentRef.current;
-        // Схема живёт в файле доски, поэтому без открытой доски её некуда
-        // положить. И класть её в доску ЧУЖОГО проекта тоже нельзя: запрос
-        // пришёл из конкретной папки, и ответ должен остаться в ней.
-        if (!board) {
-          throw new Error("Не открыта доска — схему некуда сохранять");
+        const target = JSON.parse(request.content)?.board;
+        const bare = (name: string) => name.replace(/\.excalidraw$/, "");
+        if (typeof target === "string" && bare(target) !== bare(board.name)) {
+          return;
         }
-        if (!board.path.startsWith(`${directory}/`)) {
-          throw new Error(
-            "Открыта доска из другой папки — откройте доску этого проекта"
-          );
-        }
-        const { count, title } = await applySchemeRequest(api, request.content);
+      } catch {
+        // Разбор запроса — забота applySchemeRequest: он же и объяснит, что
+        // именно в нём не так.
+      }
+
+      try {
+        const { count, title, edited } = await applySchemeRequest(
+          api,
+          request.content
+        );
         await invoke("finish_scheme_request", {
           directory,
           name: request.name,
         });
         toast(
-          title
-            ? `Схема «${title}» добавлена: ${count} элементов`
-            : `Схема добавлена: ${count} элементов`
+          edited
+            ? `Схема изменена: ${count} правок`
+            : title
+              ? `Схема «${title}» добавлена: ${count} элементов`
+              : `Схема добавлена: ${count} элементов`
         );
       } catch (error) {
         // Причина уезжает файлом рядом с запросом: тот, кто его положил,
