@@ -62,6 +62,29 @@ const extent = (element) => {
   return { minX: Math.min(...xs), maxX: Math.max(...xs), minY: Math.min(...ys), maxY: Math.max(...ys) };
 };
 
+const polyline = (points) =>
+  points.map((p, i) => `${i === 0 ? "M" : "L"}${p[0]},${p[1]}`).join(" ");
+
+/** Тот же маршрут, но каждый излом срезан дугой — как рисует редактор. */
+const rounded = (points, radius = 12) => {
+  const parts = [`M${points[0][0]},${points[0][1]}`];
+  for (let i = 1; i < points.length - 1; i += 1) {
+    const [px, py] = points[i - 1];
+    const [cx, cy] = points[i];
+    const [nx, ny] = points[i + 1];
+    const back = Math.min(radius, Math.hypot(cx - px, cy - py) / 2);
+    const fwd = Math.min(radius, Math.hypot(nx - cx, ny - cy) / 2);
+    const ax = cx + Math.sign(px - cx) * back;
+    const ay = cy + Math.sign(py - cy) * back;
+    const bx = cx + Math.sign(nx - cx) * fwd;
+    const by = cy + Math.sign(ny - cy) * fwd;
+    parts.push(`L${ax},${ay}`, `Q${cx},${cy} ${bx},${by}`);
+  }
+  const last = points[points.length - 1];
+  parts.push(`L${last[0]},${last[1]}`);
+  return parts.join(" ");
+};
+
 const shapeOf = (element) => {
   const fill = element.backgroundColor === "transparent" ? "none" : element.backgroundColor;
   const common = `fill="${fill}" stroke="${element.strokeColor}" stroke-width="${element.strokeWidth}"${
@@ -82,7 +105,10 @@ const shapeOf = (element) => {
       if (points.length < 2) {
         return "";
       }
-      const line = `<polyline points="${points.map((p) => p.join(",")).join(" ")}" fill="none" stroke="${element.strokeColor}" stroke-width="${element.strokeWidth}" stroke-linejoin="round"/>`;
+      // Прямоугольная связь рисуется со скруглёнными углами — так её рисует и
+      // редактор. Без этого картинка для осмотра врёт: острый угол на ней
+      // выглядит дефектом, которого на экране нет.
+      const line = `<path d="${element.elbowed ? rounded(points) : polyline(points)}" fill="none" stroke="${element.strokeColor}" stroke-width="${element.strokeWidth}" stroke-linejoin="round"/>`;
       if (element.type === "line") {
         return line;
       }
