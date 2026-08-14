@@ -61,8 +61,20 @@ fn board(path: &Path) -> Board {
     }
 }
 
+/// Verification and UI-acceptance runs must never read or write the person's
+/// real LocalBoard configuration. The override is deliberately accepted only
+/// as an absolute path: a typo must not turn the source checkout into storage.
+fn data_root_override() -> Option<PathBuf> {
+    std::env::var_os("LOCALBOARD_DATA_ROOT")
+        .map(PathBuf::from)
+        .filter(|path| path.is_absolute())
+}
+
 fn config_file(app: &AppHandle) -> Result<PathBuf, String> {
-    let dir = app.path().app_config_dir().map_err(|e| e.to_string())?;
+    let dir = match data_root_override() {
+        Some(path) => path,
+        None => app.path().app_config_dir().map_err(|e| e.to_string())?,
+    };
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     Ok(dir.join("config.json"))
 }
@@ -81,6 +93,9 @@ fn write_config(app: &AppHandle, config: &Config) -> Result<(), String> {
 }
 
 fn default_dir(app: &AppHandle) -> PathBuf {
+    if let Some(root) = data_root_override() {
+        return root.join("boards");
+    }
     app.path()
         .document_dir()
         .or_else(|_| app.path().home_dir())
@@ -675,7 +690,7 @@ fn read_base64(path: String) -> Result<String, String> {
 }
 
 fn main() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .manage(BoardMenuTarget::default())
         .on_menu_event(|app, event| {
             let (topic, action) = match event.id().0.as_str() {
@@ -699,17 +714,27 @@ fn main() {
                     }),
                 );
             }
-        })
-        // Регистрируется первым — так требует плагин. Второй запуск (из Dock,
-        // из Finder или прямым вызовом бинарника в обход LaunchServices) не
-        // создаёт вторую копию, а выводит вперёд уже открытое окно.
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.unminimize();
-                let _ = window.show();
-                let _ = window.set_focus();
-            }
-        }))
+        });
+    // An isolated acceptance copy has its own absolute data root and must be
+    // allowed to coexist with the person's installed LocalBoard. The normal
+    // product still remains single-instance; changing only Info.plist is not
+    // enough because the plugin identity is compiled into the binary.
+    let builder = if data_root_override().is_some() {
+        builder
+    } else {
+        builder
+            // Регистрируется первым — так требует плагин. Второй запуск (из Dock,
+            // из Finder или прямым вызовом бинарника в обход LaunchServices) не
+            // создаёт вторую копию, а выводит вперёд уже открытое окно.
+            .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.unminimize();
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            }))
+    };
+    builder
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
@@ -736,4 +761,30 @@ fn main() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running LocalBoard");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn board_and_folder_names_come_from_the_last_path_component() {
+        let path = Path::new("/tmp/project/Architecture.excalidraw");
+        assert_eq!(board(path).name, "Architecture.excalidraw");
+        assert_eq!(folder(path.parent().unwrap()).name, "project");
+    }
+
+    #[test]
+    fn inbox_is_always_scoped_to_its_board_folder() {
+        assert_eq!(
+            inbox_dir(Path::new("/tmp/project")),
+            PathBuf::from("/tmp/project/_inbox")
+        );
+    }
+
+    #[test]
+    fn board_extension_is_not_accepted_as_a_suffix_of_another_extension() {
+        assert_eq!(Path::new("board.excalidraw").extension().unwrap(), EXT);
+        assert_ne!(Path::new("board.excalidraw.tmp").extension().unwrap(), EXT);
+    }
 }
