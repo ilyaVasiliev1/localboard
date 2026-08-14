@@ -425,7 +425,7 @@ fn list_boards(directory: String) -> Result<Vec<Board>, String> {
         .filter(|p| p.extension().is_some_and(|e| e == EXT))
         .map(|p| board(&p))
         .collect();
-    out.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    out.sort_by_key(|item| item.name.to_lowercase());
     Ok(out)
 }
 

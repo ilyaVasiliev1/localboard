@@ -1,0 +1,33 @@
+{
+  "expiresPolicy": "Every exception must expire and be reviewed or removed before that date.",
+  "advisories": {
+    "https://github.com/advisories/GHSA-67mh-4wv8-2f99": {
+      "expires": "2026-10-15",
+      "reason": "Transitive esbuild copy belongs to the pinned editor build toolchain; its development server is never shipped or exposed by LocalBoard."
+    },
+    "https://github.com/advisories/GHSA-r5fr-rjxr-66jc": {
+      "expires": "2026-10-15",
+      "reason": "No fixed lodash-es release is available in the current Mermaid parser chain; LocalBoard does not expose lodash templates or parser import keys to a remote caller."
+    },
+    "https://github.com/advisories/GHSA-f23m-r3pf-42rh": {
+      "expires": "2026-10-15",
+      "reason": "No fixed lodash-es release is available in the current Mermaid parser chain; LocalBoard does not call unset or omit with user-controlled paths."
+    },
+    "https://github.com/advisories/GHSA-xxjr-mmjv-4gpg": {
+      "expires": "2026-10-15",
+      "reason": "No fixed lodash-es release is available in the current Mermaid parser chain; LocalBoard does not call unset or omit with user-controlled paths."
+    },
+    "https://github.com/advisories/GHSA-mwcw-c2x4-8c55": {
+      "expires": "2026-10-15",
+      "reason": "The transitive diagram converter supplies fixed positive integer Nano ID sizes; users cannot control the generator size."
+    },
+    "https://github.com/advisories/GHSA-28wg-ghj8-5hjv": {
+      "expires": "2026-10-15",
+      "reason": "The transitive diagram converter supplies fixed positive integer Nano ID sizes; users cannot pass a negative size."
+    },
+    "https://github.com/advisories/GHSA-2v37-7h3g-55p8": {
+      "expires": "2026-10-15",
+      "reason": "The transitive diagram converter supplies fixed positive integer Nano ID sizes; users cannot pass a zero size."
+    }
+  }
+}

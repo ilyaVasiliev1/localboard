@@ -43,7 +43,7 @@ export const boardsIcon = createIcon(
     <path d="M4 14m0 1a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v4a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1z" />
     <path d="M14 14m0 1a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v4a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1z" />
   </g>,
-  tablerIconProps,
+  tablerIconProps
 );
 
 // tabler-icons: plus
@@ -53,7 +53,7 @@ export const plusIcon = createIcon(
     <line x1="12" y1="5" x2="12" y2="19" />
     <line x1="5" y1="12" x2="19" y2="12" />
   </g>,
-  tablerIconProps,
+  tablerIconProps
 );
 
 // tabler-icons: file-import
@@ -65,7 +65,7 @@ export const importIcon = createIcon(
     <path d="M2 19h7" />
     <path d="M6 16l3 3l-3 3" />
   </g>,
-  tablerIconProps,
+  tablerIconProps
 );
 
 // tabler-icons: pin (keeps the panel open)
@@ -76,7 +76,7 @@ export const pinIcon = createIcon(
     <line x1="12" y1="16" x2="12" y2="21" />
     <line x1="8" y1="4" x2="16" y2="4" />
   </g>,
-  tablerIconProps,
+  tablerIconProps
 );
 
 export const closeIcon = createIcon(
@@ -85,7 +85,7 @@ export const closeIcon = createIcon(
     <path d="M18 6l-12 12" />
     <path d="M6 6l12 12" />
   </g>,
-  tablerIconProps,
+  tablerIconProps
 );
 
 // tabler-icons: layout-board (a single board in the list)
@@ -97,7 +97,7 @@ export const boardIcon = createIcon(
     <path d="M12 8h8" />
     <path d="M12 4v16" />
   </g>,
-  tablerIconProps,
+  tablerIconProps
 );
 
 // tabler-icons: sparkles (работа с ИИ-ассистентом)
@@ -106,7 +106,7 @@ export const sparklesIcon = createIcon(
     <path stroke="none" d="M0 0h24v24H0z" fill="none" />
     <path d="M16 18a2 2 0 0 1 2 2a2 2 0 0 1 2 -2a2 2 0 0 1 -2 -2a2 2 0 0 1 -2 2zm0 -12a2 2 0 0 1 2 2a2 2 0 0 1 2 -2a2 2 0 0 1 -2 -2a2 2 0 0 1 -2 2zm-7 12a6 6 0 0 1 6 -6a6 6 0 0 1 -6 -6a6 6 0 0 1 -6 6a6 6 0 0 1 6 6z" />
   </g>,
-  tablerIconProps,
+  tablerIconProps
 );
 
 // tabler-icons: copy
@@ -116,7 +116,7 @@ export const copyIcon = createIcon(
     <path d="M7 7m0 2.667a2.667 2.667 0 0 1 2.667 -2.667h8.666a2.667 2.667 0 0 1 2.667 2.667v8.666a2.667 2.667 0 0 1 -2.667 2.667h-8.666a2.667 2.667 0 0 1 -2.667 -2.667z" />
     <path d="M4.012 16.737a2.005 2.005 0 0 1 -1.012 -1.737v-10c0 -1.1 .9 -2 2 -2h10c.75 0 1.158 .385 1.5 1" />
   </g>,
-  tablerIconProps,
+  tablerIconProps
 );
 
 // tabler-icons: folder-open
@@ -125,7 +125,7 @@ export const folderIcon = createIcon(
     <path stroke="none" d="M0 0h24v24H0z" fill="none" />
     <path d="M5 19l2.757 -7.351a1 1 0 0 1 .936 -.649h12.307a1 1 0 0 1 .986 1.164l-.996 5.211a2 2 0 0 1 -1.964 1.625h-14.026a2 2 0 0 1 -2 -2v-11a2 2 0 0 1 2 -2h4l3 3h7a2 2 0 0 1 2 2v2" />
   </g>,
-  tablerIconProps,
+  tablerIconProps
 );
 
 // tabler-icons: download (сохранить копию файлом)
@@ -136,7 +136,7 @@ export const saveIcon = createIcon(
     <path d="M7 11l5 5l5 -5" />
     <path d="M12 4l0 12" />
   </g>,
-  tablerIconProps,
+  tablerIconProps
 );
 
 // tabler-icons: chevron-down (свернуть и развернуть папку)
@@ -145,7 +145,7 @@ export const chevronIcon = createIcon(
     <path stroke="none" d="M0 0h24v24H0z" fill="none" />
     <path d="M6 9l6 6l6 -6" />
   </g>,
-  tablerIconProps,
+  tablerIconProps
 );
 
 // tabler-icons: refresh (проверить обновления)
@@ -155,5 +155,5 @@ export const downloadIcon = createIcon(
     <path d="M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4" />
     <path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4" />
   </g>,
-  tablerIconProps,
+  tablerIconProps
 );

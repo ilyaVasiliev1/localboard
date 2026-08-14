@@ -242,7 +242,7 @@ export default function App() {
   const syncBoards = useCallback(async () => {
     const list = await invoke<Folder[]>("list_folders");
     setFolders((previous) =>
-      JSON.stringify(previous) === JSON.stringify(list) ? previous : list,
+      JSON.stringify(previous) === JSON.stringify(list) ? previous : list
     );
     const pairs = await Promise.all(
       list.map(async (item) => {
@@ -254,17 +254,22 @@ export default function App() {
         } catch {
           return [item.path, [] as Board[]] as const;
         }
-      }),
+      })
     );
     const next = Object.fromEntries(pairs);
     setBoards((previous) =>
-      JSON.stringify(previous) === JSON.stringify(next) ? previous : next,
+      JSON.stringify(previous) === JSON.stringify(next) ? previous : next
     );
 
     // Открытая доска могла исчезнуть из-под приложения. Держать её на экране
     // нельзя: автосохранение воссоздало бы файл там, откуда его убрали.
     const open = currentRef.current;
-    if (open && !Object.values(next).flat().some((b) => b.path === open.path)) {
+    if (
+      open &&
+      !Object.values(next)
+        .flat()
+        .some((b) => b.path === open.path)
+    ) {
       window.clearTimeout(saveTimer.current);
       saveTimer.current = undefined;
       clearCanvas();
@@ -542,14 +547,14 @@ export default function App() {
           localStorage.setItem(LAST_BOARD_KEY, moved.path);
         }
         setCollapsed((previous) =>
-          previous.filter((path) => path !== target.path),
+          previous.filter((path) => path !== target.path)
         );
         toast(`«${boardTitle(board)}» → ${target.name}`);
       } catch (error) {
         toast(`Не удалось перенести: ${error}`);
       }
     },
-    [flushPendingSave, folders, listBoards, toast],
+    [flushPendingSave, folders, listBoards, toast]
   );
 
   /** Подключение папки: доски остаются там, где лежат, приложение лишь узнаёт о них. */
@@ -691,8 +696,8 @@ export default function App() {
           edited
             ? `Схема изменена: ${count} правок`
             : title
-              ? `Схема «${title}» добавлена: ${count} элементов`
-              : `Схема добавлена: ${count} элементов`
+            ? `Схема «${title}» добавлена: ${count} элементов`
+            : `Схема добавлена: ${count} элементов`
         );
       } catch (error) {
         // Причина уезжает файлом рядом с запросом: тот, кто его положил,
@@ -890,7 +895,7 @@ export default function App() {
                     // Проверка идёт десятки секунд; обычная плашка гаснет за
                     // пять и оставляет человека в тишине.
                     duration: sticky ? Infinity : undefined,
-                  }),
+                  })
                 )
               }
               aria-label="Проверить обновления"
@@ -1011,7 +1016,7 @@ export default function App() {
                           "localboard-folder--target",
                         dragOver === item.path &&
                           dragging !== item.path &&
-                          "localboard-folder--drop",
+                          "localboard-folder--drop"
                       )}
                       key={item.path}
                       onDragOver={(event) => {
@@ -1022,7 +1027,7 @@ export default function App() {
                       }}
                       onDragLeave={() =>
                         setDragOver((current) =>
-                          current === item.path ? null : current,
+                          current === item.path ? null : current
                         )
                       }
                       onDrop={(event) => {
@@ -1084,7 +1089,7 @@ export default function App() {
                             setNewBoardError("");
                             setCreating(item.path);
                             setCollapsed((previous) =>
-                              previous.filter((path) => path !== item.path),
+                              previous.filter((path) => path !== item.path)
                             );
                           }}
                         >
@@ -1150,11 +1155,13 @@ export default function App() {
                         </form>
                       )}
 
-                      {!folded && list.length === 0 && creating !== item.path && (
-                        <p className="localboard-list__empty">
-                          {needle ? "Ничего не найдено" : "Пока нет досок"}
-                        </p>
-                      )}
+                      {!folded &&
+                        list.length === 0 &&
+                        creating !== item.path && (
+                          <p className="localboard-list__empty">
+                            {needle ? "Ничего не найдено" : "Пока нет досок"}
+                          </p>
+                        )}
 
                       {!folded &&
                         list.map((board) => {
@@ -1210,7 +1217,7 @@ export default function App() {
                               onDragStart={(event) => {
                                 event.dataTransfer.setData(
                                   "text/plain",
-                                  board.path,
+                                  board.path
                                 );
                                 event.dataTransfer.effectAllowed = "move";
                                 setDragging(item.path);

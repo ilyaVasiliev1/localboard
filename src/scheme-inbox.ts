@@ -11,7 +11,10 @@
  * Вставка идёт через обычный `updateScene`, поэтому она попадает в историю
  * правок (Cmd+Z отменяет её целиком) и уезжает в файл штатным автосохранением.
  */
-import { CaptureUpdateAction, convertToExcalidrawElements } from "@excalidraw/excalidraw";
+import {
+  CaptureUpdateAction,
+  convertToExcalidrawElements,
+} from "@excalidraw/excalidraw";
 import {
   Scene,
   bindBindingElement,
@@ -108,18 +111,20 @@ const boundsOf = (items: readonly any[]): Bounds | null => {
  */
 const anchoredBounds = (
   elements: readonly any[],
-  anchor: string,
+  anchor: string
 ): Bounds | null => {
   const needle = anchor.trim().toLowerCase();
   if (!needle) {
     return null;
   }
-  const byId = new Map<string, any>(elements.map((element) => [element.id, element]));
+  const byId = new Map<string, any>(
+    elements.map((element) => [element.id, element])
+  );
 
   const seed = elements.find(
     (element) =>
       typeof element.text === "string" &&
-      element.text.toLowerCase().includes(needle),
+      element.text.toLowerCase().includes(needle)
   );
   if (!seed) {
     return null;
@@ -159,7 +164,9 @@ const anchoredBounds = (
 };
 
 /** Центр текущего вида — куда класть схему, когда доска ещё пуста. */
-const viewportCentre = (api: ExcalidrawImperativeAPI): { x: number; y: number } => {
+const viewportCentre = (
+  api: ExcalidrawImperativeAPI
+): { x: number; y: number } => {
   const state = api.getAppState();
   const zoom = state.zoom?.value || 1;
   return {
@@ -171,7 +178,7 @@ const viewportCentre = (api: ExcalidrawImperativeAPI): { x: number; y: number } 
 const styleSkeletons = (
   skeletons: readonly any[],
   style: SchemeStyle,
-  roles: Record<string, SchemeRole> | undefined,
+  roles: Record<string, SchemeRole> | undefined
 ): any[] => {
   const overrides = Object.entries(roles ?? {}).map(([text, role]) => ({
     needle: text.trim().toLowerCase(),
@@ -197,7 +204,8 @@ const styleSkeletons = (
     const label: string = skeleton.label?.text ?? "";
     const needle = label.trim().toLowerCase();
     const override = overrides.find(
-      (candidate) => needle === candidate.needle || needle.includes(candidate.needle),
+      (candidate) =>
+        needle === candidate.needle || needle.includes(candidate.needle)
     );
     const role = override?.role ?? roleForShape(skeleton.type);
     const shape = style.roles[role];
@@ -240,7 +248,7 @@ type Laid = { skeletons: any[]; bindings: Map<string, [string, string]> };
 
 const applyLayout = async (
   skeletons: readonly any[],
-  direction: string,
+  direction: string
 ): Promise<Laid> => {
   const bindings = new Map<string, [string, string]>();
   const routed = await layoutScheme(skeletons, direction);
@@ -335,7 +343,7 @@ const unwrapLabels = (elements: readonly any[]): any[] => {
 /** Приклеивает концы связей к блокам, не сдвигая рассчитанный маршрут. */
 const bindRoutes = (
   elements: readonly any[],
-  bindings: Map<string, [string, string]>,
+  bindings: Map<string, [string, string]>
 ): any[] => {
   const scene = new Scene(structuredClone(elements) as any);
   const map = scene.getNonDeletedElementsMap();
@@ -356,7 +364,13 @@ const bindRoutes = (
         (element.y + point[1] - node.y) / node.height,
       ] as [number, number];
     const last = element.points[element.points.length - 1];
-    bindBindingElementToFixedPoint(element, from, "start", at(from, element.points[0]), scene);
+    bindBindingElementToFixedPoint(
+      element,
+      from,
+      "start",
+      at(from, element.points[0]),
+      scene
+    );
     bindBindingElementToFixedPoint(element, to, "end", at(to, last), scene);
   }
   return scene.getElementsIncludingDeleted() as any[];
@@ -388,7 +402,7 @@ const parseRequest = (raw: string): SchemeRequest => {
  */
 export const applySchemeRequest = async (
   api: ExcalidrawImperativeAPI,
-  raw: string,
+  raw: string
 ): Promise<{ count: number; title?: string; edited?: boolean }> => {
   const request = parseRequest(raw);
 
@@ -430,7 +444,7 @@ export const applySchemeRequest = async (
   // окажутся блоки, а именно от этого зависит, есть ли связи что обходить.
   const laid = await applyLayout(
     styleSkeletons(skeletons, style, request.roles),
-    directionOf(request.mermaid ?? ""),
+    directionOf(request.mermaid ?? "")
   );
   skeletons = laid.skeletons;
 
@@ -460,7 +474,7 @@ export const applySchemeRequest = async (
   const placed = shift(
     skeletons,
     target.x - source.minX,
-    target.y + titleOffset - source.minY,
+    target.y + titleOffset - source.minY
   );
 
   if (request.title) {
@@ -477,9 +491,9 @@ export const applySchemeRequest = async (
 
   const converted = bindRoutes(
     unwrapLabels(
-      convertToExcalidrawElements(placed as any, { regenerateIds: false }),
+      convertToExcalidrawElements(placed as any, { regenerateIds: false })
     ),
-    laid.bindings,
+    laid.bindings
   );
   if (files) {
     const list = Object.values(files);

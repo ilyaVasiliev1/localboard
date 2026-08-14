@@ -53,8 +53,8 @@ export const checkForUpdates = async (report: Report) => {
       text.includes("timed out") || text.includes("timeout")
         ? "GitHub не ответил за 45 секунд — попробуйте позже"
         : isOffline(error)
-          ? "Нет соединения с интернетом — проверить обновления не получилось"
-          : `Не удалось проверить обновления: ${error}`,
+        ? "Нет соединения с интернетом — проверить обновления не получилось"
+        : `Не удалось проверить обновления: ${error}`
     );
     return;
   }
@@ -66,7 +66,7 @@ export const checkForUpdates = async (report: Report) => {
 
   const confirmed = await ask(
     `Доступна версия ${update.version}. Приложение скачает и установит её, затем перезапустится. Доски не затрагиваются.`,
-    { title: "Обновить LocalBoard?", kind: "info", okLabel: "Обновить" },
+    { title: "Обновить LocalBoard?", kind: "info", okLabel: "Обновить" }
   );
   if (!confirmed) {
     return;
@@ -86,7 +86,7 @@ export const checkForUpdates = async (report: Report) => {
         if (total > 0) {
           report(
             `Загружаю обновление… ${Math.round((received / total) * 100)}%`,
-            true,
+            true
           );
         }
       } else if (event.event === "Finished") {
@@ -98,7 +98,7 @@ export const checkForUpdates = async (report: Report) => {
     report(
       isOffline(error)
         ? "Связь прервалась — обновление не установлено, приложение не пострадало"
-        : `Не удалось установить обновление: ${error}`,
+        : `Не удалось установить обновление: ${error}`
     );
   }
 };

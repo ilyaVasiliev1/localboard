@@ -119,7 +119,9 @@ const showSaveFilePicker = async (options: PickerOptions = {}) => {
   return saveHandle(path);
 };
 
-const showOpenFilePicker = async (options: PickerOptions | PickerOptions[] = {}) => {
+const showOpenFilePicker = async (
+  options: PickerOptions | PickerOptions[] = {}
+) => {
   const opts = Array.isArray(options) ? options[0] ?? {} : options;
   const picked = await open({
     multiple: opts.multiple ?? false,

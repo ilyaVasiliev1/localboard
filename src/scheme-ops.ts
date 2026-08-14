@@ -60,7 +60,10 @@ export type SchemeOp =
  * годится как образец вида. Унаследованное `isDeleted` дало бы новый элемент,
  * которого на доске нет.
  */
-const copy = <T extends Record<string, any>>(element: T, changes: Partial<T>): T => ({
+const copy = <T extends Record<string, any>>(
+  element: T,
+  changes: Partial<T>
+): T => ({
   ...structuredClone(element),
   isDeleted: false,
   id: randomId(),
@@ -83,7 +86,12 @@ const LOOK = [
   "opacity",
 ] as const;
 
-const TEXT_LOOK = ["strokeColor", "fontFamily", "fontSize", "textAlign"] as const;
+const TEXT_LOOK = [
+  "strokeColor",
+  "fontFamily",
+  "fontSize",
+  "textAlign",
+] as const;
 
 const pick = (element: any, keys: readonly string[]) => {
   const result: Record<string, any> = {};
@@ -97,7 +105,7 @@ const pick = (element: any, keys: readonly string[]) => {
 
 const boundTextOf = (element: any, scene: Scene): any => {
   const bound = (element.boundElements ?? []).find(
-    (item: any) => item?.type === "text",
+    (item: any) => item?.type === "text"
   );
   return bound ? scene.getNonDeletedElementsMap().get(bound.id) : undefined;
 };
@@ -223,7 +231,7 @@ const route = (
   y1: number,
   x2: number,
   y2: number,
-  axis: "vertical" | "horizontal",
+  axis: "vertical" | "horizontal"
 ) => {
   const points: [number, number][] = [[0, 0]];
   const dx = x2 - x1;
@@ -252,22 +260,44 @@ const route = (
  */
 export const facingSides = (
   from: any,
-  to: any,
+  to: any
 ): [[number, number], [number, number]] => {
   const dx = to.x + to.width / 2 - (from.x + from.width / 2);
   if (from.type === "diamond" && Math.abs(dx) > 24) {
-    return dx > 0 ? [[1, 0.5], [0.5, 0]] : [[0, 0.5], [0.5, 0]];
+    return dx > 0
+      ? [
+          [1, 0.5],
+          [0.5, 0],
+        ]
+      : [
+          [0, 0.5],
+          [0.5, 0],
+        ];
   }
   const overlap =
     Math.min(from.x + from.width, to.x + to.width) - Math.max(from.x, to.x);
   const under = overlap > Math.min(from.width, to.width) * 0.25;
   if (under && to.y >= from.y + from.height) {
-    return [[0.5, 1], [0.5, 0]];
+    return [
+      [0.5, 1],
+      [0.5, 0],
+    ];
   }
   if (under && to.y + to.height <= from.y) {
-    return [[0.5, 0], [0.5, 1]];
+    return [
+      [0.5, 0],
+      [0.5, 1],
+    ];
   }
-  return dx > 0 ? [[1, 0.5], [0, 0.5]] : [[0, 0.5], [1, 0.5]];
+  return dx > 0
+    ? [
+        [1, 0.5],
+        [0, 0.5],
+      ]
+    : [
+        [0, 0.5],
+        [1, 0.5],
+      ];
 };
 
 /**
@@ -293,16 +323,11 @@ const attach = (scene: Scene, arrow: any, from: any, to: any) => {
     arrow,
     updateElbowArrowPoints(arrow, scene.getNonDeletedElementsMap(), {
       points: [points[0], points[points.length - 1]],
-    }) as any,
+    }) as any
   );
 };
 
-const connect = (
-  scene: Scene,
-  from: any,
-  to: any,
-  template: any,
-): any => {
+const connect = (scene: Scene, from: any, to: any, template: any): any => {
   const arrow = copy(template, {
     boundElements: null,
     startBinding: null,
@@ -325,10 +350,12 @@ const arrowBetween = (scene: Scene, fromId: string, toId: string): any => {
       (element: any) =>
         element.type === "arrow" &&
         element.startBinding?.elementId === fromId &&
-        element.endBinding?.elementId === toId,
+        element.endBinding?.elementId === toId
     );
   if (!arrow) {
-    throw new Error(`Между ${fromId} и ${toId} нет связи — вставлять не во что`);
+    throw new Error(
+      `Между ${fromId} и ${toId} нет связи — вставлять не во что`
+    );
   }
   return arrow;
 };
@@ -344,11 +371,11 @@ const arrowBetween = (scene: Scene, fromId: string, toId: string): any => {
 const freeSpotOn = (
   scene: Scene,
   arrow: any,
-  donor: any,
+  donor: any
 ): { x: number; y: number } => {
   const points = arrow.points as [number, number][];
   const blocks = (scene.getNonDeletedElements() as any[]).filter((element) =>
-    ["rectangle", "diamond", "ellipse"].includes(element.type),
+    ["rectangle", "diamond", "ellipse"].includes(element.type)
   );
 
   // Пробуем не только изломы, но и точки между ними: на длинном прямом
@@ -370,12 +397,11 @@ const freeSpotOn = (
         x < block.x + block.width + 16 &&
         block.x < x + donor.width + 16 &&
         y < block.y + block.height + 16 &&
-        block.y < y + donor.height + 16,
+        block.y < y + donor.height + 16
     );
   });
 
-  const [dx, dy] =
-    clear ?? points[Math.floor(points.length / 2)] ?? points[0];
+  const [dx, dy] = clear ?? points[Math.floor(points.length / 2)] ?? points[0];
   return { x: arrow.x + dx, y: arrow.y + dy };
 };
 
@@ -392,7 +418,7 @@ const onRoute = (
   from: any,
   to: any,
   donor: any,
-  text: string,
+  text: string
 ) => {
   const donorText = boundTextOf(donor, scene);
   const spot = freeSpotOn(scene, arrow, donor);
@@ -430,7 +456,7 @@ const insert = (
   scene: Scene,
   [fromId, toId]: [string, string],
   text: string,
-  likeId: string | undefined,
+  likeId: string | undefined
 ) => {
   const from = find(scene, fromId, "вставка");
   const to = find(scene, toId, "вставка");
@@ -449,15 +475,14 @@ const insert = (
 
   // Схему растят в ту сторону, в которую она и растёт: колонку — вниз, ряд —
   // вправо. Раздвинуть ряд по вертикали значит развалить его раскладку.
-  const down =
-    Math.abs(to.y - from.y) >= Math.abs(to.x - from.x);
+  const down = Math.abs(to.y - from.y) >= Math.abs(to.x - from.x);
 
   // Зазор берётся фактический — тот, который человек оставил между этими же
   // двумя блоками. Схема после вставки сохраняет свой ритм, а не приходит к
   // некоторому «правильному» шагу, придуманному здесь.
   const gap = Math.max(
     down ? to.y - (from.y + from.height) : to.x - (from.x + from.width),
-    40,
+    40
   );
   const donorText = boundTextOf(donor, scene);
 
@@ -537,7 +562,7 @@ const insert = (
     const broken = () =>
       words.some(
         (word: string) =>
-          !text.text.split("\n").some((line: string) => line.includes(word)),
+          !text.text.split("\n").some((line: string) => line.includes(word))
       );
     const limit = live.width * 2;
     while (broken() && live.width < limit) {
@@ -608,7 +633,9 @@ const applyOp = (scene: Scene, operation: SchemeOp): string => {
       const element = find(scene, operation.id, "сдвиг");
       translate(scene, element, operation.dx ?? 0, operation.dy ?? 0);
       updateBoundElements(element, scene);
-      return `сдвиг ${operation.id} на ${operation.dx ?? 0}, ${operation.dy ?? 0}`;
+      return `сдвиг ${operation.id} на ${operation.dx ?? 0}, ${
+        operation.dy ?? 0
+      }`;
     }
     case "delete": {
       const element = find(scene, operation.id, "удаление");
@@ -620,10 +647,10 @@ const applyOp = (scene: Scene, operation: SchemeOp): string => {
       const to = find(scene, operation.to, "связь");
       const template = operation.like
         ? (scene.getElementsIncludingDeleted() as any[]).find(
-            (element) => element.id === operation.like,
+            (element) => element.id === operation.like
           )
         : (scene.getNonDeletedElements() as any[]).find(
-            (element) => element.type === "arrow",
+            (element) => element.type === "arrow"
           );
       if (!template) {
         throw new Error("Нет ни одной стрелки, с которой снять вид связи");
@@ -648,13 +675,13 @@ const applyOp = (scene: Scene, operation: SchemeOp): string => {
  */
 export const applySchemeOps = (
   api: ExcalidrawImperativeAPI,
-  ops: readonly SchemeOp[],
+  ops: readonly SchemeOp[]
 ): string[] => {
   if (!Array.isArray(ops) || ops.length === 0) {
     throw new Error("В запросе нет ни одной операции");
   }
   const scene = new Scene(
-    structuredClone(api.getSceneElements() as any[]) as any,
+    structuredClone(api.getSceneElements() as any[]) as any
   );
 
   const done = ops.map((operation) => applyOp(scene, operation));

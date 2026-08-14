@@ -130,10 +130,10 @@ const orthogonal = (points: [number, number][]): [number, number][] => {
  */
 export const layoutScheme = async (
   skeletons: readonly Skeleton[],
-  direction: string,
+  direction: string
 ): Promise<Routed | null> => {
   const nodes = skeletons.filter(
-    (skeleton) => !isArrow(skeleton) && skeleton.id,
+    (skeleton) => !isArrow(skeleton) && skeleton.id
   );
   const arrows = skeletons.filter((skeleton) => isArrow(skeleton));
   if (nodes.length === 0) {
@@ -187,7 +187,7 @@ export const layoutScheme = async (
     const points = orthogonal([
       [section.startPoint.x, section.startPoint.y],
       ...(section.bendPoints ?? []).map(
-        (point: any) => [point.x, point.y] as [number, number],
+        (point: any) => [point.x, point.y] as [number, number]
       ),
       [section.endPoint.x, section.endPoint.y],
     ]);
