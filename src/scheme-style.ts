@@ -60,14 +60,16 @@ export type SchemeStyle = {
  * `backgroundColor` нужным ролям, остальной конвейер уже готов.
  */
 const MONOCHROME: ShapeStyle = {
+  // TOK-scheme.stroke — цвет линий схемы.
   strokeColor: "#1e1e1e",
-  // `transparent`, а не белый: белая заливка перекрывает сетку холста и всё,
+  // TOK-scheme.fill — заливка блоков. `transparent`, а не белый: белая заливка перекрывает сетку холста и всё,
   // что человек нарисовал под схемой.
   backgroundColor: "transparent",
   fillStyle: "solid",
 };
 
 export const DEFAULT_SCHEME_STYLE: SchemeStyle = {
+  // TOK-scheme.stroke-width, TOK-scheme.roughness, TOK-scheme.roundness.
   strokeWidth: 2,
   roughness: 1,
   roundness: "round",
@@ -81,7 +83,10 @@ export const DEFAULT_SCHEME_STYLE: SchemeStyle = {
   // Тип стрелки решается по схеме, а не выбирается заранее: прямая хороша в
   // линейной цепочке и начинает мешать там, где ветки расходятся и сходятся
   // обратно — тогда связи идут наискось через всю схему.
+  // TOK-scheme.arrow-color и TOK-scheme.arrow-width берут значение у блока;
+  // TOK-scheme.arrow-shape решается по виду схемы.
   arrow: { strokeColor: "#1e1e1e", strokeWidth: 2, shape: "auto" },
+  // TOK-scheme.title-size — размер подписи схемы.
   title: { fontSize: 28, strokeColor: "#1e1e1e" },
 };
 
