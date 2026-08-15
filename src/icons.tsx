@@ -57,17 +57,6 @@ export const plusIcon = createIcon(
 );
 
 // tabler-icons: file-import
-export const importIcon = createIcon(
-  <g strokeWidth={1.5}>
-    <path stroke="none" d="M0 0h24v24H0z" fill="none" />
-    <path d="M14 3v4a1 1 0 0 0 1 1h4" />
-    <path d="M5 13v-8a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2h-5.5" />
-    <path d="M2 19h7" />
-    <path d="M6 16l3 3l-3 3" />
-  </g>,
-  tablerIconProps
-);
-
 // tabler-icons: pin (keeps the panel open)
 export const pinIcon = createIcon(
   <g strokeWidth={1.5}>
@@ -110,15 +99,6 @@ export const sparklesIcon = createIcon(
 );
 
 // tabler-icons: copy
-export const copyIcon = createIcon(
-  <g strokeWidth={1.5}>
-    <path stroke="none" d="M0 0h24v24H0z" fill="none" />
-    <path d="M7 7m0 2.667a2.667 2.667 0 0 1 2.667 -2.667h8.666a2.667 2.667 0 0 1 2.667 2.667v8.666a2.667 2.667 0 0 1 -2.667 2.667h-8.666a2.667 2.667 0 0 1 -2.667 -2.667z" />
-    <path d="M4.012 16.737a2.005 2.005 0 0 1 -1.012 -1.737v-10c0 -1.1 .9 -2 2 -2h10c.75 0 1.158 .385 1.5 1" />
-  </g>,
-  tablerIconProps
-);
-
 // tabler-icons: folder-open
 export const folderIcon = createIcon(
   <g strokeWidth={1.5}>

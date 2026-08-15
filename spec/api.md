@@ -97,12 +97,14 @@ HTTP.
 - in: directory (строка)
 - out: boardsDir (строка), guide (строка), cli (строка)
 - links: TERM-guide, EC-005
+- none: DM — сведения складываются из путей и готовой команды, своей сущностью не являются
 - impl: app:src-tauri/src/main.rs
 
 ## API-shell.reveal — Показ пути в Finder
 - in: path (строка)
 - out: полей нет; отказ — причина запуска
 - links: EC-005
+- none: DM — на вход идёт путь, ответа с телом нет
 - impl: app:src-tauri/src/main.rs
 
 ## API-file.export — Запись файла выгрузки
@@ -119,4 +121,5 @@ HTTP.
 - in: полей нет
 - out: update — версия (строка) и заметки (строка); пусто, когда установлена последняя
 - links: DEP-github-releases, EC-010, EC-011, EC-012, INV-003
+- none: DM — ответ описан полями самой точки входа и своей сущностью в продукте не хранится
 - impl: app:src/updates.ts
