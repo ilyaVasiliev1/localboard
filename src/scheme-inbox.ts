@@ -23,7 +23,9 @@ import {
   updateElbowArrowPoints,
 } from "@excalidraw/element";
 
-import { applySchemeOps, between, type SchemeOp } from "./scheme-ops";
+import { applySchemeOps } from "./scheme-ops";
+import { between } from "./scheme-ops-geometry";
+import type { SchemeOp } from "./scheme-ops-types";
 import { directionOf, layoutScheme } from "./scheme-layout";
 import {
   DEFAULT_SCHEME_STYLE,
