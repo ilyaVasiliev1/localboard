@@ -17,7 +17,11 @@
     "app": {
       "dir": ".",
       "stack": "macos-tauri",
-      "capabilities": []
+      "capabilities": [],
+      "dependency_dirs": [
+        "node_modules",
+        "upstream-excalidraw"
+      ]
     }
   }
 }
