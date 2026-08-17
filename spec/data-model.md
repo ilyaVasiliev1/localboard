@@ -54,4 +54,4 @@ style        — точечные правки канона оформления
 
 - Закрытый перечень: поля сверх названных система не читает.
 - links: TERM-scheme-request, TERM-scheme-role
-- impl: app:src/scheme-inbox.ts
+- impl: app:src/
