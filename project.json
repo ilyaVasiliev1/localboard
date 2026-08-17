@@ -1,8 +1,23 @@
 {
   "project": "localboard",
   "what": "LocalBoard — настольное приложение macOS для досок и схем: офлайновый редактор Excalidraw над обычными файлами; им работают доски системы",
+  "client": {
+    "who": "Engineering OS — свой продукт компании",
+    "jurisdiction": "ru",
+    "data_subjects": [
+      "владелец продукта — содержимое его досок"
+    ],
+    "must_not_export": [
+      "содержимое досок компании"
+    ],
+    "deliver_to": "локальная установка на машине владельца: /Applications/LocalBoard.app"
+  },
   "spec": "spec",
   "repos": {
-    "app": { "dir": ".", "stack": "macos-tauri", "capabilities": [] }
+    "app": {
+      "dir": ".",
+      "stack": "macos-tauri",
+      "capabilities": []
+    }
   }
 }
