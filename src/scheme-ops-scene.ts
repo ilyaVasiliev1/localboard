@@ -10,6 +10,7 @@ import {
   bindBindingElement,
   bindBindingElementToFixedPoint,
   updateElbowArrowPoints,
+  redrawTextBoundingBox,
   updateBoundElements,
 } from "@excalidraw/element";
 
@@ -92,6 +93,18 @@ export const translate = (
   if (text) {
     scene.mutateElement(text, { x: text.x + dx, y: text.y + dy });
   }
+};
+
+export const setLabel = (scene: Scene, container: any, value: string) => {
+  const text = boundTextOf(container, scene);
+  if (!text) {
+    throw new Error(`У элемента ${container.id} нет подписи`);
+  }
+  scene.mutateElement(text, { text: value, originalText: value });
+  // Пересчёт блока под новый текст: иначе длинная подпись вылезет за границы,
+  // а короткая оставит блок неоправданно широким.
+  redrawTextBoundingBox(text, container, scene);
+  updateBoundElements(container, scene);
 };
 
 /**

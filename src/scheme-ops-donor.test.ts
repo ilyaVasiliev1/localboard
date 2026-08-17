@@ -34,6 +34,8 @@ describe("copy", () => {
   const donor = {
     id: "donor-1",
     type: "rectangle",
+    x: 0,
+    y: 0,
     strokeColor: "#1e1e1e",
     isDeleted: false,
     seed: 1,
